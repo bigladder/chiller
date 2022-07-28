@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "chiller"
+version = "0.1.0"
+description = ""
+authors = ["Big Ladder Software"]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<=3.9"
+Pint = "^0.17"
+CoolProp = "6.4.1"
+numpy = "1.22.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.2"
+pylint = "^2.7.2"
+doit = "^0.33.1"
+pyyaml = "6.0"
+cbor2 = "5.4.3"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
