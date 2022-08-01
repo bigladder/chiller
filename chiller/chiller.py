@@ -1,7 +1,7 @@
 from chiller.fluid_properties import FluidState
 from .conditions import AHRI_550_590_WATER_COOLED_CONDITIONS, AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET, AHRI_550_590_WATER_COOLED_EVAPORATOR_INLET, OperatingConditions
 from .models.energyplus_eir import EnergyPlusEIR
-from .units import fr_u
+from .units import fr_u, to_u
 from numpy import linspace
 
 class Chiller:
@@ -12,6 +12,7 @@ class Chiller:
     rated_cop=2.0,
     cycling_degradation_coefficient=0.0,
     standby_power=0.0,
+    rated_net_condenser_capacity=None,
     number_of_compressor_speeds=None,
     minimum_evaporator_leaving_temperature=fr_u(39.0,"°F"),
     maximum_evaporator_leaving_temperature=fr_u(60.0,"°F"),
@@ -24,18 +25,17 @@ class Chiller:
     self.model = model
 
     self.number_of_compressor_speeds = number_of_compressor_speeds
-
-    self.model.set_system(self)
-
+    self.rated_net_condenser_capacity = rated_net_condenser_capacity
     self.rated_net_evaporator_capacity = rated_net_evaporator_capacity
     self.rated_cop = rated_cop
     self.cycling_degradation_coefficient = cycling_degradation_coefficient
     self.standby_power = standby_power
-
     self.minimum_evaporator_leaving_temperature = minimum_evaporator_leaving_temperature
     self.maximum_evaporator_leaving_temperature = maximum_evaporator_leaving_temperature
     self.minimum_condenser_entering_temperature = minimum_condenser_entering_temperature
     self.maximum_condenser_entering_temperature = maximum_condenser_entering_temperature
+
+    self.model.set_system(self)
 
     self.set_rated_evaporator_volumetric_flow_rate()
     self.set_rated_condenser_volumetric_flow_rate()
@@ -68,29 +68,29 @@ class Chiller:
   def cop(self, conditions=None):
     return self.net_evaporator_capacity(conditions)/self.input_power(conditions)
 
-  def condenser_liquid_leaving_temperature(self, conditions=None):
+  def condenser_liquid_leaving_state(self, conditions=None):
     if conditions == None:
       conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
-    return conditions.condenser_inlet.T + self.net_condenser_capacity(conditions)/(conditions.condenser_inlet.get_cp()*conditions.condenser_inlet.m_dot)
+    return conditions.condenser_inlet.add_heat(self.net_condenser_capacity(conditions))
 
-  def evaporator_liquid_entering_temperature(self, conditions=None):
+  def evaporator_liquid_entering_state(self, conditions=None):
     if conditions == None:
       conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
-    return conditions.evaporator_outlet.T + self.net_evaporator_capacity(conditions)/(conditions.evaporator_outlet.get_cp()*conditions.evaporator_outlet.m_dot)
+    return conditions.evaporator_outlet.add_heat(self.net_condenser_capacity(conditions))
 
   def space_loss_heat(self, conditions=None):
     return (self.input_power(conditions) + self.net_evaporator_capacity(conditions)) - (self.net_condenser_capacity(conditions) + self.oil_cooler_heat(conditions) + self.auxiliary_heat(conditions))
 
   def set_rated_evaporator_volumetric_flow_rate(self):
     delta_T = AHRI_550_590_WATER_COOLED_EVAPORATOR_INLET.T - AHRI_550_590_WATER_COOLED_CONDITIONS.evaporator_outlet.T
-    m_dot = self.net_evaporator_capacity()/(AHRI_550_590_WATER_COOLED_CONDITIONS.evaporator_outlet.get_cp()*delta_T)
+    m_dot = self.rated_net_evaporator_capacity/(AHRI_550_590_WATER_COOLED_CONDITIONS.evaporator_outlet.get_cp()*delta_T)
     AHRI_550_590_WATER_COOLED_CONDITIONS.evaporator_outlet.set_m_dot(m_dot)
     AHRI_550_590_WATER_COOLED_EVAPORATOR_INLET.set_m_dot(m_dot)
     self.rated_evaporator_volumetric_flow_rate = AHRI_550_590_WATER_COOLED_CONDITIONS.evaporator_outlet.V_dot
 
   def set_rated_condenser_volumetric_flow_rate(self):
     delta_T = AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET.T - AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.T
-    m_dot = self.net_condenser_capacity()/(AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.get_cp()*delta_T)
+    m_dot = self.rated_net_condenser_capacity/(AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.get_cp()*delta_T)
     AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.set_m_dot(m_dot)
     AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET.set_m_dot(m_dot)
     self.rated_condenser_volumetric_flow_rate = AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.V_dot
@@ -139,8 +139,8 @@ class Chiller:
               input_powers.append(self.input_power(conditions))
               net_evaporator_capacities.append(self.net_evaporator_capacity(conditions))
               net_condenser_capacities.append(self.net_condenser_capacity(conditions))
-              evaporator_liquid_entering_temperatures.append(self.evaporator_liquid_entering_temperature(conditions))
-              condenser_liquid_leaving_temperatures.append(self.condenser_liquid_leaving_temperature(conditions))
+              evaporator_liquid_entering_temperatures.append(self.evaporator_liquid_entering_state(conditions).T)
+              condenser_liquid_leaving_temperatures.append(self.condenser_liquid_leaving_state(conditions).T)
               evaporator_liquid_differential_pressures.append(fr_u(15.,"kPa"))
               condenser_liquid_differential_pressures.append(fr_u(15.,"kPa"))
               oil_cooler_heats.append(self.oil_cooler_heat(conditions))
