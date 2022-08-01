@@ -19,24 +19,24 @@ class EnergyPlusReformulatedEIR(EnergyPlusEIR):
 
   def input_power(self, conditions):
     cap = self.net_evaporator_capacity(conditions)
-    coeffs = self.system.kwargs["eir_f_t"]
-    eir_f_t = calc_biquad(coeffs, to_u(conditions.evaporator_outlet.T,"°C"), to_u(self.condenser_leaving_temperature,"°C"))
+    coeffs = self.eir_temperature_coefficients
+    eir_temperature_multiplier = calc_biquad(coeffs, to_u(conditions.evaporator_outlet.T,"°C"), to_u(self.condenser_leaving_temperature,"°C"))
     plr = self.part_load_ratio(conditions)
-    eir_f_plr = calc_bicubic(self.system.kwargs["eir_f_plr"], to_u(self.condenser_leaving_temperature,"°C"), plr)
-    eir = eir_f_t*eir_f_plr/self.system.rated_cop
+    eir_part_load_ratio_multiplier = calc_bicubic(self.eir_part_load_ratio_coefficients, to_u(self.condenser_leaving_temperature,"°C"), plr)
+    eir = eir_temperature_multiplier*eir_part_load_ratio_multiplier/self.system.rated_cop
     return eir*cap
 
   def calculate_evaporator_capacity(self, conditions, condenser_leaving_temperature):
-    cap_f_t = calc_biquad(self.system.kwargs["cap_f_t"], to_u(conditions.evaporator_outlet.T,"°C"), to_u(condenser_leaving_temperature,"°C"))
-    return self.system.rated_net_evaporator_capacity*cap_f_t*self.part_load_ratio(conditions)
+    capacity_temperature_multiplier = calc_biquad(self.capacity_temperature_coefficients, to_u(conditions.evaporator_outlet.T,"°C"), to_u(condenser_leaving_temperature,"°C"))
+    return self.system.rated_net_evaporator_capacity*capacity_temperature_multiplier*self.part_load_ratio(conditions)
 
   def calculate_condenser_capacity(self, conditions, condenser_leaving_temperature):
     evaporator_capacity = self.calculate_evaporator_capacity(conditions, condenser_leaving_temperature)
-    coeffs = self.system.kwargs["eir_f_t"]
-    eir_f_t = calc_biquad(coeffs, to_u(conditions.evaporator_outlet.T,"°C"), to_u(condenser_leaving_temperature,"°C"))
+    coeffs = self.eir_temperature_coefficients
+    eir_temperature_multiplier = calc_biquad(coeffs, to_u(conditions.evaporator_outlet.T,"°C"), to_u(condenser_leaving_temperature,"°C"))
     plr = self.part_load_ratio(conditions)
-    eir_f_plr = calc_bicubic(self.system.kwargs["eir_f_plr"], to_u(condenser_leaving_temperature,"°C"), plr)
-    eir = eir_f_t*eir_f_plr/self.system.rated_cop
+    eir_part_load_ratio_multiplier = calc_bicubic(self.eir_part_load_ratio_coefficients, to_u(condenser_leaving_temperature,"°C"), plr)
+    eir = eir_temperature_multiplier*eir_part_load_ratio_multiplier/self.system.rated_cop
     power = eir*evaporator_capacity
     return evaporator_capacity + power
 

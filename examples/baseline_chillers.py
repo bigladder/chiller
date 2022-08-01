@@ -23,9 +23,9 @@ with open('examples/90.1-chillers.csv') as file:
           "min_size": float(row[4]),
           "max_size": None if row[5] == "" else float(row[5]),
           "cop": float(row[6]),
-          "eir_f_t": [float(c) for c in row[12:18]],
-          "cap_f_t": [float(c) for c in row[18:24]],
-          "eir_f_plr": [float(c) for c in row[24:28]]
+          "eir_temperature_coefficients": [float(c) for c in row[12:18]],
+          "capacity_temperature_coefficients": [float(c) for c in row[18:24]],
+          "eir_part_load_ratio_coefficients": [float(c) for c in row[24:28]]
         }
       )
 
@@ -39,10 +39,11 @@ for chiller in chillers:
     new_chiller = Chiller(
       rated_net_evaporator_capacity=size,
       rated_cop=chiller["cop"],
-      min_plr=0.25,
-      cap_f_t=chiller["cap_f_t"],
-      eir_f_t=chiller["eir_f_t"],
-      eir_f_plr=chiller["eir_f_plr"],
+      minimum_part_load_ratio=0.25,
+      minimum_unloading_ratio=0.25,
+      capacity_temperature_coefficients=chiller["capacity_temperature_coefficients"],
+      eir_temperature_coefficients=chiller["eir_temperature_coefficients"],
+      eir_part_load_ratio_coefficients=chiller["eir_part_load_ratio_coefficients"],
       cycling_degradation_coefficient=0.0)
 
     assert abs(new_chiller.cop() - chiller["cop"]) < 0.05

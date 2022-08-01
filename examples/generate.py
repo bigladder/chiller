@@ -12,21 +12,22 @@ size_tons = 40.0
 cop = 5.5
 chiller_type = "Liquid-cooled"
 subtype = " "
-min_plr = 0.1
-min_unload = 0.2
-cap_f_t = [0.9061150, 0.0292277, -0.0003647, -0.0009709, -0.0000905, 0.0002527]
-eir_f_t = [ 0.3617105, -0.0229833, -0.0009519, 0.0131889, 0.0003752, -0.0007059]
-eir_f_plr = [ 4.602131E-02, 2.433945E-02, 6.394526E-05, -3.648563E-01, 1.854759E+00, -2.809346E-02, 0.000000E+00, -4.821515E-01, 0.000000E+00, 0.000000E+00,]
+minimum_part_load_ratio = 0.1
+minimum_unloading_ratio = 0.2
+capacity_temperature_coefficients = [0.9061150, 0.0292277, -0.0003647, -0.0009709, -0.0000905, 0.0002527]
+eir_temperature_coefficients = [ 0.3617105, -0.0229833, -0.0009519, 0.0131889, 0.0003752, -0.0007059]
+eir_part_load_ratio_coefficients = [ 4.602131E-02, 2.433945E-02, 6.394526E-05, -3.648563E-01, 1.854759E+00, -2.809346E-02, 0.000000E+00, -4.821515E-01, 0.000000E+00, 0.000000E+00,]
 
 
 my_chiller = Chiller(
   model=EnergyPlusReformulatedEIR(),
   rated_net_evaporator_capacity=fr_u(size_tons,"ton_ref"),
   rated_cop=cop,
-  min_plr=min_plr,
-  cap_f_t=cap_f_t,
-  eir_f_t=eir_f_t,
-  eir_f_plr=eir_f_plr
+  minimum_part_load_ratio=minimum_part_load_ratio,
+  minimum_unloading_ratio=minimum_unloading_ratio,
+  capacity_temperature_coefficients=capacity_temperature_coefficients,
+  eir_temperature_coefficients=eir_temperature_coefficients,
+  eir_part_load_ratio_coefficients=eir_part_load_ratio_coefficients
   )
 
 assert abs(my_chiller.net_evaporator_capacity() - my_chiller.rated_net_evaporator_capacity) < 0.01*my_chiller.rated_net_evaporator_capacity
@@ -40,7 +41,7 @@ representation = {
     "data_model": "ASHRAE_205",
     "schema": "RS0001",
     "schema_version": "0.2.0",
-    "description": f"{size_tons:.1f} ton, {cop:.2f} COP {chiller_type}{subtype}Chiller based on ASHRAE 90.1-2019 Addendum 'bd' curve set '{chiller['set']}'",
+    "description": f"{size_tons:.1f} ton, {cop:.2f} COP {chiller_type}{subtype}Chiller",
     "id": str(uuid.uuid4()),
     "data_timestamp": f"{timestamp}Z",
     "data_version": 1,

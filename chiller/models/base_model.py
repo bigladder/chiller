@@ -2,12 +2,16 @@ class ChillerModel:
   def __init__(self):
     self.system = None
     self.allowed_kwargs = []
+    self.required_kwargs = []
 
   def set_system(self, system):
     self.system = system
     for kwarg in system.kwargs:
-      if kwarg not in self.allowed_kwargs:
+      if kwarg not in self.allowed_kwargs and kwarg not in self.required_kwargs:
         raise Exception(f"Unrecognized key word argument: {kwarg}")
+    for kwarg in self.required_kwargs:
+      if kwarg not in system.kwargs:
+        raise Exception(f"Required key word argument not provided: {kwarg}")
 
   def net_evaporator_capacity(self, conditions):
     raise NotImplementedError()
