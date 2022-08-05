@@ -7,7 +7,7 @@ Purposes:
 
 1. Comparing models
 2. Generating ASHRAE 205 compliant representations
-3. Calculating standard efficiency ratings (e.g., for AHRI 510/550)
+3. Calculating standard efficiency ratings (e.g., for AHRI 550/590)
 
 Development setup
 -----------------
