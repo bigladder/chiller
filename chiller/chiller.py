@@ -3,11 +3,32 @@ from .conditions import AHRI_550_590_WATER_COOLED_CONDITIONS, AHRI_550_590_WATER
 from .models.energyplus_eir import EnergyPlusEIR
 from .units import fr_u, to_u
 from numpy import linspace
+import uuid
+import datetime
+from random import Random
+
+class ChillerMetadata:
+  def __init__(
+    self,
+    description="",
+    data_source="https://github.com/bigladder/chiller",
+    notes="",
+    compressor_type="",
+    has_hot_gas_bypass_installed=False,
+    uuid_seed=None
+    ):
+
+    self.description = description
+    self.data_source = data_source
+    self.notes = notes
+    self.compressor_type = compressor_type
+    self.has_hot_gas_bypass_installed = has_hot_gas_bypass_installed
+    self.uuid_seed = uuid_seed
 
 class Chiller:
   def __init__(
     self,
-    model=EnergyPlusEIR(),
+    model=None,
     rated_net_evaporator_capacity=fr_u(100.0,"ton_ref"),
     rated_cop=2.0,
     cycling_degradation_coefficient=0.0,
@@ -18,11 +39,15 @@ class Chiller:
     maximum_evaporator_leaving_temperature=fr_u(60.0,"°F"),
     minimum_condenser_entering_temperature=fr_u(55.0,"°F"),
     maximum_condenser_entering_temperature=fr_u(104.0,"°F"),
+    metadata=None,
     **kwargs):
 
     self.kwargs = kwargs
 
-    self.model = model
+    if model is None:
+      self.model = EnergyPlusEIR()
+    else:
+      self.model = model
 
     self.number_of_compressor_speeds = number_of_compressor_speeds
     self.rated_net_condenser_capacity = rated_net_condenser_capacity
@@ -34,6 +59,11 @@ class Chiller:
     self.maximum_evaporator_leaving_temperature = maximum_evaporator_leaving_temperature
     self.minimum_condenser_entering_temperature = minimum_condenser_entering_temperature
     self.maximum_condenser_entering_temperature = maximum_condenser_entering_temperature
+
+    if metadata is None:
+      self.metadata = ChillerMetadata()
+    else:
+      self.metadata = metadata
 
     self.model.set_system(self)
 
@@ -76,7 +106,7 @@ class Chiller:
   def evaporator_liquid_entering_state(self, conditions=None):
     if conditions == None:
       conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
-    return conditions.evaporator_outlet.add_heat(self.net_condenser_capacity(conditions))
+    return conditions.evaporator_outlet.add_heat(self.net_evaporator_capacity(conditions))
 
   def space_loss_heat(self, conditions=None):
     return (self.input_power(conditions) + self.net_evaporator_capacity(conditions)) - (self.net_condenser_capacity(conditions) + self.oil_cooler_heat(conditions) + self.auxiliary_heat(conditions))
@@ -95,7 +125,39 @@ class Chiller:
     AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET.set_m_dot(m_dot)
     self.rated_condenser_volumetric_flow_rate = AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.V_dot
 
-  def generate_205_performance(self):
+  def generate_205_representation(self):
+    # Metadata
+    timestamp = datetime.datetime.now().isoformat("T","minutes")
+    rnd = Random()
+    if self.metadata.uuid_seed is None:
+      self.metadata.uuid_seed = hash(self)
+    rnd.seed(self.metadata.uuid_seed)
+    unique_id = str(uuid.UUID(int=rnd.getrandbits(128), version=4))
+
+
+    metadata = {
+      "data_model": "ASHRAE_205",
+      "schema": "RS0001",
+      "schema_version": "0.2.0",
+      "description": self.metadata.description,
+      "id": unique_id,
+      "data_timestamp": f"{timestamp}Z",
+      "data_version": 1,
+      "data_source": self.metadata.data_source,
+      "disclaimer": "This data is synthetic and does not represent any physical products.",
+      "notes": self.metadata.notes,
+    }
+    representation_description = {
+      "product_information":
+      {
+        "liquid_data_source": "CoolProp",
+        "hot_gas_bypass_installed": self.metadata.has_hot_gas_bypass_installed
+      }
+    }
+
+    if self.metadata.compressor_type is not None:
+      representation_description["product_information"]["compressor_type"] = self.metadata.compressor_type
+
     # Create conditions
     evaporator_liquid_volumetric_flow_rates = [self.rated_evaporator_volumetric_flow_rate]
     evaporator_liquid_leaving_temperatures = linspace(self.minimum_evaporator_leaving_temperature, self.maximum_evaporator_leaving_temperature, 4).tolist()
@@ -203,4 +265,7 @@ class Chiller:
         },
       }
     }
-    return performance
+
+    representation = {"metadata": metadata, "description": representation_description, "performance": performance}
+
+    return self.model.fixup_205_representation(representation)

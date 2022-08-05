@@ -1,7 +1,7 @@
 class ChillerModel:
   def __init__(self):
     self.system = None
-    self.allowed_kwargs = []
+    self.allowed_kwargs = {}
     self.required_kwargs = []
 
   def set_system(self, system):
@@ -12,6 +12,10 @@ class ChillerModel:
     for kwarg in self.required_kwargs:
       if kwarg not in system.kwargs:
         raise Exception(f"Required key word argument not provided: {kwarg}")
+    # Apply defaults
+    for kwarg in self.allowed_kwargs:
+      if kwarg not in system.kwargs:
+        system.kwargs[kwarg] = self.allowed_kwargs[kwarg]
 
   def net_evaporator_capacity(self, conditions):
     raise NotImplementedError()
@@ -27,3 +31,6 @@ class ChillerModel:
 
   def auxiliary_heat(self, conditions):
     raise NotImplementedError()
+
+  def fixup_205_representation(self, representation):
+    return representation

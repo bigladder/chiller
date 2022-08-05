@@ -1,11 +1,11 @@
 from chiller import Chiller, fr_u
-from chiller.models import EnergyPlusReformulatedEIR, EnergyPlusEIR
+from chiller.models import EnergyPlusReformulatedEIR
 
 import yaml
 import cbor2
 import json
-import uuid
-import datetime
+
+from chiller.models.ashrae_90_1 import ASHRAE90_1, CompliancePathType, CompressorType, CondenserType
 
 # From Large Office Reference Building
 size_tons = 40.0
@@ -33,38 +33,69 @@ my_chiller = Chiller(
 assert abs(my_chiller.net_evaporator_capacity() - my_chiller.rated_net_evaporator_capacity) < 0.01*my_chiller.rated_net_evaporator_capacity
 # assert abs(my_chiller.cop() - my_chiller.rated_cop) < 0.05
 
-performance = my_chiller.generate_205_performance()
+my_chiller.metadata.description = f"{size_tons:.1f} ton, {cop:.2f} COP {chiller_type}{subtype}Chiller"
 
-timestamp = datetime.datetime.now().isoformat("T","minutes")
-representation = {
-  "metadata": {
-    "data_model": "ASHRAE_205",
-    "schema": "RS0001",
-    "schema_version": "0.2.0",
-    "description": f"{size_tons:.1f} ton, {cop:.2f} COP {chiller_type}{subtype}Chiller",
-    "id": str(uuid.uuid4()),
-    "data_timestamp": f"{timestamp}Z",
-    "data_version": 1,
-    "data_source": "Big Ladder Software",
-    "disclaimer": "This data is synthetic and does not represent any physical products.",
-    "notes": f"",
-  },
-  "description": {
-    "product_information":
-    {
-      "compressor_type": "CENTRIFUGAL" if subtype == "Centrifugal" else "SCROLL",
-      "liquid_data_source": "CoolProp",
-      "hot_gas_bypass_installed": False
-    }
-  },
-  "performance": performance
-}
+representation = my_chiller.generate_205_representation()
 
-with open(f"output/Reformulated.RS0001.a205.yaml", "w") as file:
+output_directory_path = "output"
+file_name = "Reformulated.RS0001.a205"
+
+with open(f"{output_directory_path}/{file_name}.yaml", "w") as file:
   yaml.dump(representation, file, sort_keys=False)
 
-with open(f"output/Reformulated.RS0001.a205.cbor", "wb") as file:
+with open(f"{output_directory_path}/{file_name}.cbor", "wb") as file:
   cbor2.dump(representation, file)
 
-with open(f"output/Reformulated.RS0001.a205.json", "w") as file:
+with open(f"{output_directory_path}/{file_name}.json", "w") as file:
+  json.dump(representation, file, indent=4)
+
+# For Large Office ASHRAE 90.1 Building
+
+new_chiller = Chiller(
+  model=ASHRAE90_1(),
+  rated_net_evaporator_capacity=999070.745,
+  rated_cop=5.33,
+  path_type=CompliancePathType.PRM,
+  compressor_type=CompressorType.POSITIVE_DISPLACEMENT,
+  condenser_type=CondenserType.LIQUID_COOLED
+  )
+
+representation = new_chiller.generate_205_representation()
+
+file_name = "CoolSys1-Chiller.RS0001.a205"
+
+with open(f"{output_directory_path}/{file_name}.yaml", "w") as file:
+  yaml.dump(representation, file, sort_keys=False)
+
+with open(f"{output_directory_path}/{file_name}.cbor", "wb") as file:
+  cbor2.dump(representation, file)
+
+with open(f"{output_directory_path}/{file_name}.json", "w") as file:
+  json.dump(representation, file, indent=4)
+
+new_chiller2 = Chiller(
+  model=ASHRAE90_1(),
+  rated_net_evaporator_capacity=999070.745,
+  rated_cop=5.33,
+  cycling_degradation_coefficient=0.25,
+  standby_power=500.0,
+  space_gain_fraction=0.02,
+  oil_cooler_fraction=0.01,
+  auxiliary_fraction=0.01,
+  path_type=CompliancePathType.PRM,
+  compressor_type=CompressorType.POSITIVE_DISPLACEMENT,
+  condenser_type=CondenserType.LIQUID_COOLED
+  )
+
+representation = new_chiller2.generate_205_representation()
+
+file_name = "CoolSys1-Chiller-Detailed.RS0001.a205"
+
+with open(f"{output_directory_path}/{file_name}.yaml", "w") as file:
+  yaml.dump(representation, file, sort_keys=False)
+
+with open(f"{output_directory_path}/{file_name}.cbor", "wb") as file:
+  cbor2.dump(representation, file)
+
+with open(f"{output_directory_path}/{file_name}.json", "w") as file:
   json.dump(representation, file, indent=4)
