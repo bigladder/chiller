@@ -1,3 +1,5 @@
+from hashlib import sha256
+
 from .energyplus_eir import EnergyPlusEIR
 from enum import Enum
 from ..units import to_u
@@ -107,7 +109,7 @@ class ASHRAE90_1(EnergyPlusEIR):
     ChillerCurveSet('Y',CompliancePathType.PRM,CondenserType.LIQUID_COOLED,CompressorType.POSITIVE_DISPLACEMENT,1055056.0,float('inf'),2.249027391,2.011288139,[0.87313, 0.033599, -0.001391, 0.000961, -0.000114, 0.000178],[0.664854, -0.029016, 0.001339, 0.017823, 8e-06, -0.000318],[0.320097, 0.074356, 0.602938, 0.0]),
     ChillerCurveSet('Z',CompliancePathType.PRM,CondenserType.LIQUID_COOLED,CompressorType.CENTRIFUGAL,0.0,527528.0,2.473754288,2.355939718,[0.97331, 0.040996, -0.001782, -0.00834, 1.6e-05, 0.000327],[0.628525, -0.028798, 0.001019, 0.027867, -0.000349, 2e-06],[0.281669, 0.202762, 0.515409, 0.0]),
     ChillerCurveSet('AA',CompliancePathType.PRM,CondenserType.LIQUID_COOLED,CompressorType.CENTRIFUGAL,527528.0,1055056.0,2.228629645,2.096395978,[0.909633, 0.03546, -0.001881, -0.001808, -0.000158, 0.000648],[0.46433, -0.033834, 0.000731, 0.040345, -0.000592, 0.000277],[0.339494, 0.04909, 0.611582, 0.0]),
-    ChillerCurveSet('AB',CompliancePathType.PRM,CondenserType.LIQUID_COOLED,CompressorType.CENTRIFUGAL,1055056.0,351681816.48,2.027817348,1.932510636,[0.988289, 0.031128, -0.00155, -0.003349, -0.000147, 0.000503],[0.563967, -0.034331, 0.001015, 0.033941, -0.000432, -2.5e-05],[0.309752, 0.153649, 0.536462, 0.0])
+    ChillerCurveSet('AB',CompliancePathType.PRM,CondenserType.LIQUID_COOLED,CompressorType.CENTRIFUGAL,1055056.0,float('inf'),2.027817348,1.932510636,[0.988289, 0.031128, -0.00155, -0.003349, -0.000147, 0.000503],[0.563967, -0.034331, 0.001015, 0.033941, -0.000432, -2.5e-05],[0.309752, 0.153649, 0.536462, 0.0])
   ]
 
   def __init__(self):
@@ -158,8 +160,8 @@ class ASHRAE90_1(EnergyPlusEIR):
     if compressor_text is not None:
       type_text += f", {compressor_text} compressor"
     type_text += f" chiller"
-    system.metadata.description = f"{to_u(system.rated_net_evaporator_capacity,'ton_ref'):.1f} ton, {system.rated_cop:.2f} COP {type_text}"
-    system.metadata.uuid_seed = hash((
+    system.metadata.description = f"ASHRAE 90.1-2019 Addendum 'bd' curve set '{self.curve_set.set_name}': {to_u(system.rated_net_evaporator_capacity,'ton_ref'):.1f} ton, {system.rated_cop:.2f} COP {type_text}"
+    unique_characteristics = (
       system.rated_net_evaporator_capacity,
       system.rated_cop,
       system.cycling_degradation_coefficient,
@@ -167,7 +169,8 @@ class ASHRAE90_1(EnergyPlusEIR):
       self.path_type,
       self.compressor_type,
       self.condenser_type
-    ))
+    )
+    system.metadata.uuid_seed = sha256(f"{unique_characteristics}".encode()).hexdigest()
 
 
     return super().set_system(system)

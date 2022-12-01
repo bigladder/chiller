@@ -5,10 +5,9 @@ description = ""
 authors = ["Big Ladder Software"]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.10"
+python = "^3.7"
 Pint = "^0.17"
 CoolProp = "6.4.1"
-numpy = "1.22.0"
 scipy = "^1.5.4"
 
 [tool.poetry.dev-dependencies]

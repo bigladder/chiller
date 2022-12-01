@@ -138,7 +138,7 @@ class Chiller:
     metadata = {
       "data_model": "ASHRAE_205",
       "schema": "RS0001",
-      "schema_version": "0.2.0",
+      "schema_version": "1.0.0",
       "description": self.metadata.description,
       "id": unique_id,
       "data_timestamp": f"{timestamp}Z",
