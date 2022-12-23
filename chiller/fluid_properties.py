@@ -1,6 +1,6 @@
 from re import S
 import CoolProp.CoolProp as CP
-from .units import fr_u
+from koozie import fr_u
 
 class FluidState:
   def __init__(self, temperature, pressure=fr_u(1.0,"atm"), volumetric_flow_rate=None, mass_flow_rate=None, fluid_name="Water"):

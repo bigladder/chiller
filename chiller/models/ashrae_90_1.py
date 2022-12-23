@@ -2,7 +2,7 @@ from hashlib import sha256
 
 from .energyplus_eir import EnergyPlusEIR
 from enum import Enum
-from ..units import to_u
+from koozie import to_u
 
 class CondenserType(Enum):
   LIQUID_COOLED = 1

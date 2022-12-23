@@ -1,5 +1,7 @@
-from chiller import Chiller, fr_u
+from chiller import Chiller
 from chiller.models.ashrae_90_1 import ASHRAE90_1, CondenserType
+
+from koozie import fr_u
 
 import yaml
 import cbor2

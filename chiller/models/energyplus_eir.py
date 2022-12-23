@@ -1,7 +1,7 @@
 
 from .base_model import ChillerModel
 from ..util import calc_biquad, calc_cubic
-from ..units import to_u
+from koozie import to_u
 
 class EnergyPlusEIR(ChillerModel):
   def __init__(self):

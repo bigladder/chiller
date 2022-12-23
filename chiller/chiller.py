@@ -1,7 +1,7 @@
 from chiller.fluid_properties import FluidState
 from .conditions import AHRI_550_590_WATER_COOLED_CONDITIONS, AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET, AHRI_550_590_WATER_COOLED_EVAPORATOR_INLET, OperatingConditions
 from .models.energyplus_eir import EnergyPlusEIR
-from .units import fr_u, to_u
+from koozie import fr_u
 from numpy import linspace
 import uuid
 import datetime

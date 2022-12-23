@@ -1,5 +1,7 @@
-from chiller import Chiller, fr_u
+from chiller import Chiller
 from chiller.models import EnergyPlusReformulatedEIR
+
+from koozie import fr_u
 
 import yaml
 import cbor2

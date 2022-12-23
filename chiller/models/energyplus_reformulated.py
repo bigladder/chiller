@@ -2,7 +2,7 @@
 from chiller.fluid_properties import FluidState
 from .energyplus_eir import EnergyPlusEIR
 from ..util import calc_biquad, calc_bicubic
-from ..units import to_u
+from koozie import to_u
 from scipy import optimize
 
 class EnergyPlusReformulatedEIR(EnergyPlusEIR):

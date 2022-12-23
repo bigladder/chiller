@@ -1,5 +1,5 @@
 from .fluid_properties import FluidState
-from .units import fr_u
+from koozie import fr_u
 
 class OperatingConditions:
   def __init__(self, condenser_inlet, evaporator_outlet, compressor_speed=0):
