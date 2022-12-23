@@ -38,7 +38,7 @@ with open('examples/90.1-chillers.csv') as file:
 for chiller in ASHRAE90_1.chiller_curve_sets:
   if chiller.condenser_type == CondenserType.LIQUID_COOLED:
     if chiller.maximum_capacity == float('inf'):
-      size = chiller.minimum_capacity
+      size = chiller.minimum_capacity + fr_u(50., "ton_ref")
     else:
       size = (chiller.minimum_capacity + chiller.maximum_capacity)*0.5
     new_chiller = Chiller(
@@ -57,11 +57,11 @@ for chiller in ASHRAE90_1.chiller_curve_sets:
     output_directory_path = "output"
     file_name = f"ASHRAE90-1-2019-bd-Curve-Set-{chiller.set_name}.RS0001.a205"
 
-    with open(f"{output_directory_path}/{file_name}.yaml", "w") as file:
-      yaml.dump(representation, file, sort_keys=False)
+    # with open(f"{output_directory_path}/{file_name}.yaml", "w") as file:
+    #   yaml.dump(representation, file, sort_keys=False)
 
-    with open(f"{output_directory_path}/{file_name}.cbor", "wb") as file:
-      cbor2.dump(representation, file)
+    # with open(f"{output_directory_path}/{file_name}.cbor", "wb") as file:
+    #   cbor2.dump(representation, file)
 
     with open(f"{output_directory_path}/{file_name}.json", "w") as file:
       json.dump(representation, file, indent=4)
