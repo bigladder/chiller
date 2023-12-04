@@ -5,10 +5,10 @@ description = ""
 authors = ["Big Ladder Software"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 koozie = "^1.1.0"
 CoolProp = "6.6.0"
-scipy = "^1.5.4"
+scipy = "1.11.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
