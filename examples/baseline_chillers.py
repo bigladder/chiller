@@ -15,6 +15,7 @@ from chiller.models.ashrae_90_1 import ChillerCurveSet, compliance_path_text, co
 chillers = []
 
 with open('examples/90.1-chillers.csv') as file:
+
   reader = csv.reader(file)
   for row in reader:
     if reader.line_num > 1:
@@ -25,11 +26,11 @@ with open('examples/90.1-chillers.csv') as file:
         compressor_type=next(k for k, v in compressor_type_text.items() if v == row[3]),
         minimum_capacity=fr_u(float(row[4]),"ton_ref"),
         maximum_capacity=float("inf") if row[5] == "" else fr_u(float(row[5]),"ton_ref"),
-        cop=float(row[6]),
-        iplv=float(row[7]),
-        eir_temperature_coefficients=[float(c) for c in row[12:18]],
-        capacity_temperature_coefficients=[float(c) for c in row[18:24]],
-        eir_part_load_ratio_coefficients=[float(c) for c in row[24:28]]
+        cop=1./fr_u(float(row[8]),"kW/ton_ref") if row[6] == "" else fr_u(float(row[6]),"Btu/(W*h)"),
+        iplv=1./fr_u(float(row[9]),"kW/ton_ref") if row[7] == "" else fr_u(float(row[7]),"Btu/(W*h)"),
+        eir_temperature_coefficients=[float(c) for c in row[10:16]],
+        capacity_temperature_coefficients=[float(c) for c in row[16:22]],
+        eir_part_load_ratio_coefficients=[float(c) for c in row[22:26]]
       ))
 
       chillers[-1].print_constructor()
