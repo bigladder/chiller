@@ -7,7 +7,7 @@ authors = ["Big Ladder Software"]
 [tool.poetry.dependencies]
 python = "^3.8"
 koozie = "^1.1.0"
-CoolProp = "6.4.1"
+CoolProp = "6.6.0"
 scipy = "^1.5.4"
 
 [tool.poetry.dev-dependencies]
