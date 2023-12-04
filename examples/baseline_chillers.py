@@ -1,5 +1,6 @@
 from chiller import Chiller
 from chiller.models.ashrae_90_1 import ASHRAE90_1, CondenserType
+from hashlib import sha256
 
 from koozie import fr_u
 
@@ -51,6 +52,14 @@ for chiller in ASHRAE90_1.chiller_curve_sets:
 
     assert abs(new_chiller.cop() - new_chiller.rated_cop) < 0.05
     assert abs(new_chiller.net_evaporator_capacity() - new_chiller.rated_net_evaporator_capacity) < 0.01*size
+
+    new_chiller.metadata.data_version = 2
+    unique_characteristics = (
+      chiller.set_name,
+      new_chiller.rated_net_evaporator_capacity
+    )
+    new_chiller.metadata.uuid_seed = sha256(f"{unique_characteristics}".encode()).hexdigest()
+
 
     representation = new_chiller.generate_205_representation()
 

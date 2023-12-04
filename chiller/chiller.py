@@ -15,7 +15,8 @@ class ChillerMetadata:
     notes="",
     compressor_type="",
     has_hot_gas_bypass_installed=False,
-    uuid_seed=None
+    uuid_seed=None,
+    data_version=1
     ):
 
     self.description = description
@@ -24,6 +25,7 @@ class ChillerMetadata:
     self.compressor_type = compressor_type
     self.has_hot_gas_bypass_installed = has_hot_gas_bypass_installed
     self.uuid_seed = uuid_seed
+    self.data_version = data_version
 
 class Chiller:
   def __init__(
@@ -142,7 +144,7 @@ class Chiller:
       "description": self.metadata.description,
       "id": unique_id,
       "data_timestamp": f"{timestamp}Z",
-      "data_version": 1,
+      "data_version": self.metadata.data_version,
       "data_source": self.metadata.data_source,
       "disclaimer": "This data is synthetic and does not represent any physical products.",
       "notes": self.metadata.notes,
