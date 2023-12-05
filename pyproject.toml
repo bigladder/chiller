@@ -7,15 +7,15 @@ authors = ["Big Ladder Software"]
 [tool.poetry.dependencies]
 python = "^3.9"
 koozie = "^1.1.0"
-CoolProp = "6.6.0"
-scipy = "1.11.4"
+CoolProp = "^6.6.0"
+scipy = "^1.11.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
 pylint = "^2.7.2"
 doit = "^0.33.1"
-pyyaml = "6.0"
-cbor2 = "5.4.3"
+pyyaml = "^6.0"
+cbor2 = "^5.4.3"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
