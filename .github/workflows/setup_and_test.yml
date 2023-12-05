@@ -24,7 +24,7 @@ jobs:
       - name: Test
         run: poetry run doit
       - name: Upload output
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: output-${{ matrix.os }}-py${{ matrix.python-version }}
           path: output
