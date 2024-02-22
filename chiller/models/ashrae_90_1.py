@@ -82,6 +82,7 @@ class ChillerCurveSet:
 
 class ASHRAE90_1(EnergyPlusEIR):
 
+  # fmt: off
   chiller_curve_sets = [
     ChillerCurveSet('A',CompliancePathType.ECB_A,CondenserType.AIR_COOLED,CompressorType.UNKNOWN,0.0,527528.0,2.960018222222222,4.015074222222222,[0.686206, 0.057562, -0.001835, 0.01381, -0.000338, -0.000247],[0.825618, -0.025861, 0.001396, -0.002728, 0.000381, -0.000373],[0.087789, 0.185696, 1.561411, -0.832304]),
     ChillerCurveSet('B',CompliancePathType.ECB_A,CondenserType.AIR_COOLED,CompressorType.UNKNOWN,527528.0,float('inf'),2.960018222222222,4.102995555555555,[0.794185, 0.060199, -0.002016, 0.006203, -0.000229, -0.000183],[0.807832, -0.029452, 0.001431, -0.002832, 0.000399, -0.000278],[0.118081, 0.107477, 1.570838, -0.794051]),
@@ -111,6 +112,7 @@ class ASHRAE90_1(EnergyPlusEIR):
     ChillerCurveSet('AA',CompliancePathType.PRM,CondenserType.LIQUID_COOLED,CompressorType.CENTRIFUGAL,527528.0,1055056.0,5.549713323865131,5.899770731980094,[0.909633, 0.03546, -0.001881, -0.001808, -0.000158, 0.000648],[0.46433, -0.033834, 0.000731, 0.040345, -0.000592, 0.000277],[0.339494, 0.04909, 0.611582, 0.0]),
     ChillerCurveSet('AB',CompliancePathType.PRM,CondenserType.LIQUID_COOLED,CompressorType.CENTRIFUGAL,1055056.0,float('inf'),6.099294716152158,6.400097057931454,[0.988289, 0.031128, -0.00155, -0.003349, -0.000147, 0.000503],[0.563967, -0.034331, 0.001015, 0.033941, -0.000432, -2.5e-05],[0.309752, 0.153649, 0.536462, 0.0])
   ]
+  # fmt: on
 
   def __init__(self):
     super().__init__()
@@ -151,6 +153,11 @@ class ASHRAE90_1(EnergyPlusEIR):
     system.kwargs["minimum_part_load_ratio"] = 0.25
     system.kwargs["minimum_unloading_ratio"] = 0.25
 
+
+    # scaling
+    self.minimum_scaled_rated_capacity = self.curve_set.minimum_capacity
+    self.maximum_scaled_rated_capacity = self.curve_set.maximum_capacity
+
     # set metadata
     system.metadata.notes = f"Based on ASHRAE 90.1-2019 Addendum 'bd' curve set '{self.curve_set.set_name}' for {compliance_path_text[self.curve_set.path_type]}"
     system.metadata.compressor_type = compressor_type_map[self.compressor_type]
@@ -160,7 +167,11 @@ class ASHRAE90_1(EnergyPlusEIR):
     if compressor_text is not None:
       type_text += f", {compressor_text} compressor"
     type_text += f" chiller"
-    system.metadata.description = f"ASHRAE 90.1-2019 Addendum 'bd' curve set '{self.curve_set.set_name}': {to_u(system.rated_net_evaporator_capacity,'ton_ref'):.1f} ton, {system.rated_cop:.2f} COP, {self.curve_set.iplv:.2f} IPLV {type_text}"
+    if self.maximum_scaled_rated_capacity == float('inf'):
+      size_description = f"{to_u(self.minimum_scaled_rated_capacity,'ton_ref'):.1f}+"
+    else:
+      size_description = f"{to_u(self.minimum_scaled_rated_capacity,'ton_ref'):.1f}-{to_u(self.maximum_scaled_rated_capacity,'ton_ref'):.1f}"
+    system.metadata.description = f"ASHRAE 90.1-2019 Addendum 'bd' curve set '{self.curve_set.set_name}': {size_description} ton, {system.rated_cop:.2f} COP, {self.curve_set.iplv:.2f} IPLV {type_text}"
     unique_characteristics = (
       system.rated_net_evaporator_capacity,
       system.rated_cop,
