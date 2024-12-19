@@ -1,16 +1,56 @@
-from chiller.fluid_properties import FluidState
+from enum import Enum
+
+from .fluid_properties import LiquidState
+from .psychrometrics import PsychrometricState
 from .conditions import (
-    AHRI_550_590_WATER_COOLED_CONDITIONS,
+    AHRI_550_590_LIQUID_COOLED_CONDITIONS,
     AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET,
-    AHRI_550_590_WATER_COOLED_EVAPORATOR_INLET,
+    AHRI_550_590_EVAPORATOR_INLET,
     OperatingConditions,
 )
-from .models.energyplus_eir import EnergyPlusEIR
 from koozie import fr_u
 from numpy import linspace
 import uuid
 import datetime
 from random import Random
+
+
+class CondenserType(Enum):
+    LIQUID = 1
+    AIR = 2
+    EVAPORATIVE = 3
+
+
+condenser_type_text = {
+    CondenserType.LIQUID: "liquid-cooled",
+    CondenserType.AIR: "air-cooled",
+    CondenserType.EVAPORATIVE: "evaporatively-cooled",
+}
+
+
+class CompressorType(Enum):
+    UNKNOWN = 0
+    CENTRIFUGAL = 1
+    POSITIVE_DISPLACEMENT = 2
+    SCREW = 3
+    SCROLL = 4
+
+
+compressor_type_map = {
+    CompressorType.UNKNOWN: None,
+    CompressorType.CENTRIFUGAL: "CENTRIFUGAL",
+    CompressorType.POSITIVE_DISPLACEMENT: "SCROLL",
+    CompressorType.SCREW: "SCREW",
+    CompressorType.SCROLL: "SCROLL",
+}
+
+compressor_type_text = {
+    CompressorType.UNKNOWN: "",
+    CompressorType.CENTRIFUGAL: "centrifugal",
+    CompressorType.POSITIVE_DISPLACEMENT: "positive displacement",
+    CompressorType.SCREW: "screw",
+    CompressorType.SCROLL: "scroll",
+}
 
 
 class ChillerMetadata:
@@ -19,7 +59,6 @@ class ChillerMetadata:
         description="",
         data_source="https://github.com/bigladder/chiller",
         notes="",
-        compressor_type="",
         has_hot_gas_bypass_installed=False,
         uuid_seed=None,
         data_version=1,
@@ -28,7 +67,6 @@ class ChillerMetadata:
         self.description = description
         self.data_source = data_source
         self.notes = notes
-        self.compressor_type = compressor_type
         self.has_hot_gas_bypass_installed = has_hot_gas_bypass_installed
         self.uuid_seed = uuid_seed
         self.data_version = data_version
@@ -37,27 +75,20 @@ class ChillerMetadata:
 class Chiller:
     def __init__(
         self,
-        model=None,
         rated_net_evaporator_capacity=fr_u(100.0, "ton_ref"),
         rated_cop=2.0,
         cycling_degradation_coefficient=0.0,
         standby_power=0.0,
         rated_net_condenser_capacity=None,
         number_of_compressor_speeds=None,
-        minimum_evaporator_leaving_temperature=fr_u(39.0, "°F"),
-        maximum_evaporator_leaving_temperature=fr_u(60.0, "°F"),
-        minimum_condenser_entering_temperature=fr_u(55.0, "°F"),
-        maximum_condenser_entering_temperature=fr_u(104.0, "°F"),
-        metadata=None,
-        **kwargs,
+        evaporator_leaving_temperature_range=(
+            fr_u(39.0, "°F"),  # fr_u(36.0, "°F"),
+            fr_u(60.0, "°F"),  # fr_u(70.0, "°F"),
+        ),  # AHRI 550/590 2023 Table 5
+        condenser_entering_temperature_range=None,
+        condenser_type=CondenserType.LIQUID,
+        compressor_type=CompressorType.UNKNOWN,
     ):
-
-        self.kwargs = kwargs
-
-        if model is None:
-            self.model = EnergyPlusEIR()
-        else:
-            self.model = model
 
         self.number_of_compressor_speeds = number_of_compressor_speeds
         self.rated_net_condenser_capacity = rated_net_condenser_capacity
@@ -65,72 +96,49 @@ class Chiller:
         self.rated_cop = rated_cop
         self.cycling_degradation_coefficient = cycling_degradation_coefficient
         self.standby_power = standby_power
-        self.minimum_evaporator_leaving_temperature = (
-            minimum_evaporator_leaving_temperature
-        )
-        self.maximum_evaporator_leaving_temperature = (
-            maximum_evaporator_leaving_temperature
-        )
-        self.minimum_condenser_entering_temperature = (
-            minimum_condenser_entering_temperature
-        )
-        self.maximum_condenser_entering_temperature = (
-            maximum_condenser_entering_temperature
-        )
 
-        if metadata is None:
-            self.metadata = ChillerMetadata()
-        else:
-            self.metadata = metadata
+        self.condenser_type = condenser_type
+        self.compressor_type = compressor_type
 
-        self.model.set_system(self)
+        self.evaporator_leaving_temperature_range = evaporator_leaving_temperature_range
+        self.condenser_entering_temperature_range = condenser_entering_temperature_range
 
         self.set_rated_evaporator_volumetric_flow_rate()
         self.set_rated_condenser_volumetric_flow_rate()
 
-    def net_evaporator_capacity(self, conditions=None):
-        if conditions == None:
-            conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
-        return self.model.net_evaporator_capacity(conditions)
+        self.metadata = ChillerMetadata()
 
-    def input_power(self, conditions=None):
-        if conditions == None:
-            conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
-        return self.model.input_power(conditions)
+    # TODO: Apply pressure corrections per 550/590 Appendix C
 
-    def net_condenser_capacity(self, conditions=None):
-        if conditions == None:
-            conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
-        return self.model.net_condenser_capacity(conditions)
+    def net_evaporator_capacity(self, conditions):
+        raise NotImplementedError()
 
-    def oil_cooler_heat(self, conditions=None):
-        if conditions == None:
-            conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
-        return self.model.oil_cooler_heat(conditions)
+    def input_power(self, conditions):
+        raise NotImplementedError()
 
-    def auxiliary_heat(self, conditions=None):
-        if conditions == None:
-            conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
-        return self.model.auxiliary_heat(conditions)
+    def net_condenser_capacity(self, conditions):
+        raise NotImplementedError()
+
+    def oil_cooler_heat(self, conditions):
+        raise NotImplementedError()
+
+    def auxiliary_heat(self, conditions):
+        raise NotImplementedError()
 
     def cop(self, conditions=None):
+        if conditions is None:
+            conditions = self.get_default_conditions()
         return self.net_evaporator_capacity(conditions) / self.input_power(conditions)
 
-    def condenser_liquid_leaving_state(self, conditions=None):
-        if conditions == None:
-            conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
-        return conditions.condenser_inlet.add_heat(
-            self.net_condenser_capacity(conditions)
-        )
+    def condenser_liquid_leaving_state(self, conditions):
+        raise NotImplementedError()
 
-    def evaporator_liquid_entering_state(self, conditions=None):
-        if conditions == None:
-            conditions = AHRI_550_590_WATER_COOLED_CONDITIONS
+    def evaporator_liquid_entering_state(self, conditions):
         return conditions.evaporator_outlet.add_heat(
             self.net_evaporator_capacity(conditions)
         )
 
-    def space_loss_heat(self, conditions=None):
+    def space_loss_heat(self, conditions):
         return (
             self.input_power(conditions) + self.net_evaporator_capacity(conditions)
         ) - (
@@ -140,34 +148,19 @@ class Chiller:
         )
 
     def set_rated_evaporator_volumetric_flow_rate(self):
-        delta_T = (
-            AHRI_550_590_WATER_COOLED_EVAPORATOR_INLET.T
-            - AHRI_550_590_WATER_COOLED_CONDITIONS.evaporator_outlet.T
-        )
-        m_dot = self.rated_net_evaporator_capacity / (
-            AHRI_550_590_WATER_COOLED_CONDITIONS.evaporator_outlet.get_cp() * delta_T
-        )
-        AHRI_550_590_WATER_COOLED_CONDITIONS.evaporator_outlet.set_m_dot(m_dot)
-        AHRI_550_590_WATER_COOLED_EVAPORATOR_INLET.set_m_dot(m_dot)
-        self.rated_evaporator_volumetric_flow_rate = (
-            AHRI_550_590_WATER_COOLED_CONDITIONS.evaporator_outlet.V_dot
-        )
+        raise NotImplementedError()
 
     def set_rated_condenser_volumetric_flow_rate(self):
-        delta_T = (
-            AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET.T
-            - AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.T
-        )
-        m_dot = self.rated_net_condenser_capacity / (
-            AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.get_cp() * delta_T
-        )
-        AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.set_m_dot(m_dot)
-        AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET.set_m_dot(m_dot)
-        self.rated_condenser_volumetric_flow_rate = (
-            AHRI_550_590_WATER_COOLED_CONDITIONS.condenser_inlet.V_dot
-        )
+        raise NotImplementedError()
 
-    def generate_205_representation(self):
+    def get_default_conditions(self):
+        if self.condenser_type == CondenserType.LIQUID:
+            return AHRI_550_590_LIQUID_COOLED_CONDITIONS
+
+    def generate_205_representation(
+        self,
+        capacity_range: tuple[float | None, float | None] = (None, None),
+    ) -> dict:
         # Metadata
         timestamp = datetime.datetime.now().isoformat("T", "minutes")
         rnd = Random()
@@ -192,92 +185,21 @@ class Chiller:
             "product_information": {
                 "liquid_data_source": "CoolProp",
                 "hot_gas_bypass_installed": self.metadata.has_hot_gas_bypass_installed,
+                "compressor_type": self.compressor_type.name,
             }
         }
 
-        if self.metadata.compressor_type is not None:
-            representation_description["product_information"][
-                "compressor_type"
-            ] = self.metadata.compressor_type
+        performance_map_cooling = self.make_performance_map()
 
-        # Create conditions
-        evaporator_liquid_volumetric_flow_rates = [
-            self.rated_evaporator_volumetric_flow_rate
-        ]
-        evaporator_liquid_leaving_temperatures = linspace(
-            self.minimum_evaporator_leaving_temperature,
-            self.maximum_evaporator_leaving_temperature,
-            4,
-        ).tolist()
-        condenser_liquid_volumetric_flow_rates = [
-            self.rated_condenser_volumetric_flow_rate
-        ]
-        condenser_liquid_entering_temperatures = linspace(
-            self.minimum_condenser_entering_temperature,
-            self.maximum_condenser_entering_temperature,
-            4,
-        ).tolist()
-        compressor_sequence_numbers = list(
-            range(1, self.number_of_compressor_speeds + 1)
-        )
-
-        grid_variables = {
-            "evaporator_liquid_volumetric_flow_rate": evaporator_liquid_volumetric_flow_rates,
-            "evaporator_liquid_leaving_temperature": evaporator_liquid_leaving_temperatures,
-            "condenser_liquid_volumetric_flow_rate": condenser_liquid_volumetric_flow_rates,
-            "condenser_liquid_entering_temperature": condenser_liquid_entering_temperatures,
-            "compressor_sequence_number": compressor_sequence_numbers,
-        }
-
-        input_powers = []
-        net_evaporator_capacities = []
-        net_condenser_capacities = []
-        oil_cooler_heats = []
-        auxiliary_heats = []
-        operation_states = []
-
-        for v_evap in evaporator_liquid_volumetric_flow_rates:
-            for t_evap in evaporator_liquid_leaving_temperatures:
-                for v_cond in condenser_liquid_volumetric_flow_rates:
-                    for t_cond in condenser_liquid_entering_temperatures:
-                        for speed in [
-                            self.number_of_compressor_speeds - n
-                            for n in compressor_sequence_numbers
-                        ]:
-                            conditions = OperatingConditions(
-                                evaporator_outlet=FluidState(
-                                    temperature=t_evap, volumetric_flow_rate=v_evap
-                                ),
-                                condenser_inlet=FluidState(
-                                    temperature=t_cond, volumetric_flow_rate=v_cond
-                                ),
-                                compressor_speed=speed,
-                            )
-
-                            input_powers.append(self.input_power(conditions))
-                            net_evaporator_capacities.append(
-                                self.net_evaporator_capacity(conditions)
-                            )
-                            net_condenser_capacities.append(
-                                self.net_condenser_capacity(conditions)
-                            )
-                            oil_cooler_heats.append(self.oil_cooler_heat(conditions))
-                            auxiliary_heats.append(self.auxiliary_heat(conditions))
-                            operation_states.append("NORMAL")
-
-        performance_map_cooling = {
-            "grid_variables": grid_variables,
-            "lookup_variables": {
-                "input_power": input_powers,
-                "net_evaporator_capacity": net_evaporator_capacities,
-                "net_condenser_capacity": net_condenser_capacities,
-                "oil_cooler_heat": oil_cooler_heats,
-                "auxiliary_heat": auxiliary_heats,
-                "operation_state": operation_states,
-            },
-        }
+        evaporator_liquid_volumetric_flow_rates = performance_map_cooling[
+            "grid_variables"
+        ]["evaporator_liquid_volumetric_flow_rate"]
+        evaporator_liquid_leaving_temperatures = performance_map_cooling[
+            "grid_variables"
+        ]["evaporator_liquid_leaving_temperature"]
 
         performance = {
+            "condesner_type": self.condenser_type.name,
             "evaporator_liquid_type": {  # TODO: Make consistent with model
                 "liquid_components": [
                     {
@@ -287,17 +209,7 @@ class Chiller:
                 ],
                 "concentration_type": "BY_VOLUME",
             },
-            "condenser_liquid_type": {  # TODO: Make consistent with model
-                "liquid_components": [
-                    {
-                        "liquid_constituent": "WATER",
-                        "concentration": 1.0,
-                    }
-                ],
-                "concentration_type": "BY_VOLUME",
-            },
             "evaporator_fouling_factor": 0.0,
-            "condenser_fouling_factor": 0.0,
             "compressor_speed_control_type": "CONTINUOUS",
             "cycling_degradation_coefficient": self.cycling_degradation_coefficient,
             "performance_map_cooling": performance_map_cooling,
@@ -322,7 +234,26 @@ class Chiller:
                     ),
                 },
             },
-            "performance_map_condenser_liquid_pressure_differential": {
+        }
+
+        if self.condenser_type == CondenserType.LIQUID:
+            condenser_liquid_volumetric_flow_rates = performance_map_cooling[
+                "grid_variables"
+            ]["condenser_liquid_volumetric_flow_rate"]
+            condenser_liquid_entering_temperatures = performance_map_cooling[
+                "grid_variables"
+            ]["condenser_liquid_entering_temperature"]
+            performance["condenser_liquid_type"] = {  # TODO: Make consistent with model
+                "liquid_components": [
+                    {
+                        "liquid_constituent": "WATER",
+                        "concentration": 1.0,
+                    }
+                ],
+                "concentration_type": "BY_VOLUME",
+            }
+            performance["condenser_fouling_factor"] = 0.0
+            performance["performance_map_condenser_liquid_pressure_differential"] = {
                 "grid_variables": {
                     "condenser_liquid_volumetric_flow_rate": condenser_liquid_volumetric_flow_rates,
                     "condenser_liquid_entering_temperature": condenser_liquid_entering_temperatures,
@@ -334,30 +265,24 @@ class Chiller:
                         * len(condenser_liquid_entering_temperatures)
                     ),
                 },
-            },
-        }
+            }
 
         # Scaling
-        if (
-            self.model.minimum_scaled_rated_capacity is not None
-            or self.model.maximum_scaled_rated_capacity is not None
-        ):
+        if capacity_range[0] is not None or capacity_range[1] is not None:
             scaling = {}
 
-            if self.model.minimum_scaled_rated_capacity is None:
+            if capacity_range[0] is None:
                 scaling["minimum"] = 1.0
-            elif self.model.minimum_scaled_rated_capacity > 0.0:
+            elif capacity_range[0] > 0.0:
                 scaling["minimum"] = (
-                    self.model.minimum_scaled_rated_capacity
-                    / self.rated_net_evaporator_capacity
+                    capacity_range[0] / self.rated_net_evaporator_capacity
                 )
 
-            if self.model.maximum_scaled_rated_capacity is None:
+            if capacity_range[1] is None:
                 scaling["maximum"] = 1.0
-            elif self.model.maximum_scaled_rated_capacity != float("inf"):
+            elif capacity_range[1] != float("inf"):
                 scaling["maximum"] = (
-                    self.model.maximum_scaled_rated_capacity
-                    / self.rated_net_evaporator_capacity
+                    capacity_range[1] / self.rated_net_evaporator_capacity
                 )
 
             performance["scaling"] = scaling
@@ -368,4 +293,275 @@ class Chiller:
             "performance": performance,
         }
 
-        return self.model.fixup_205_representation(representation)
+        return representation
+
+    def make_performance_map(self):
+        raise NotImplementedError()
+
+
+class LiquidCooledChiller(Chiller):
+    DEFAULT_CONDENSER_TEMPERATURE_RANGE = (
+        fr_u(55.0, "degF"),
+        fr_u(104.0, "degF"),
+    )  # (fr_u(55.0, "degF"), fr_u(115.0, "degF")) # AHRI 550/590 2023 Table 5
+
+    def __init__(
+        self,
+        rated_net_evaporator_capacity=fr_u(100, "ton_ref"),
+        rated_cop=2,
+        cycling_degradation_coefficient=0,
+        standby_power=0,
+        rated_net_condenser_capacity=None,
+        number_of_compressor_speeds=None,
+        condenser_entering_temperature_range=DEFAULT_CONDENSER_TEMPERATURE_RANGE,
+        compressor_type=CompressorType.UNKNOWN,
+    ):
+        super().__init__(
+            rated_net_evaporator_capacity=rated_net_evaporator_capacity,
+            rated_cop=rated_cop,
+            cycling_degradation_coefficient=cycling_degradation_coefficient,
+            standby_power=standby_power,
+            rated_net_condenser_capacity=rated_net_condenser_capacity,
+            number_of_compressor_speeds=number_of_compressor_speeds,
+            condenser_entering_temperature_range=condenser_entering_temperature_range,
+            condenser_type=CondenserType.LIQUID,
+            compressor_type=compressor_type,
+        )
+
+    def net_evaporator_capacity(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+        raise NotImplementedError()
+
+    def input_power(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+        raise NotImplementedError()
+
+    def net_condenser_capacity(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+        raise NotImplementedError()
+
+    def oil_cooler_heat(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+        raise NotImplementedError()
+
+    def auxiliary_heat(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+        raise NotImplementedError()
+
+    def condenser_liquid_leaving_state(
+        self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS
+    ):
+        return conditions.condenser_inlet.add_heat(
+            self.net_condenser_capacity(conditions)
+        )
+
+    def evaporator_liquid_entering_state(
+        self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS
+    ):
+        return super().evaporator_liquid_entering_state(conditions)
+
+    def space_loss_heat(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+        return super().space_loss_heat(conditions)
+
+    def set_rated_evaporator_volumetric_flow_rate(self):
+        delta_T = (
+            AHRI_550_590_EVAPORATOR_INLET.T
+            - AHRI_550_590_LIQUID_COOLED_CONDITIONS.evaporator_outlet.T
+        )
+        m_dot = self.rated_net_evaporator_capacity / (
+            AHRI_550_590_LIQUID_COOLED_CONDITIONS.evaporator_outlet.get_cp() * delta_T
+        )
+        AHRI_550_590_LIQUID_COOLED_CONDITIONS.evaporator_outlet.set_m_dot(m_dot)
+        AHRI_550_590_EVAPORATOR_INLET.set_m_dot(m_dot)
+        self.rated_evaporator_volumetric_flow_rate = (
+            AHRI_550_590_LIQUID_COOLED_CONDITIONS.evaporator_outlet.V_dot
+        )
+
+    def set_rated_condenser_volumetric_flow_rate(self):
+        delta_T = (
+            AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET.T
+            - AHRI_550_590_LIQUID_COOLED_CONDITIONS.condenser_inlet.T
+        )
+        m_dot = self.rated_net_condenser_capacity / (
+            AHRI_550_590_LIQUID_COOLED_CONDITIONS.condenser_inlet.get_cp() * delta_T
+        )
+        AHRI_550_590_LIQUID_COOLED_CONDITIONS.condenser_inlet.set_m_dot(m_dot)
+        AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET.set_m_dot(m_dot)
+        self.rated_condenser_volumetric_flow_rate = (
+            AHRI_550_590_LIQUID_COOLED_CONDITIONS.condenser_inlet.V_dot
+        )
+
+    def make_performance_map(self) -> dict:
+        # Create conditions
+        evaporator_liquid_volumetric_flow_rates = [
+            self.rated_evaporator_volumetric_flow_rate
+        ]
+        evaporator_liquid_leaving_temperatures = linspace(
+            self.evaporator_leaving_temperature_range[0],
+            self.evaporator_leaving_temperature_range[1],
+            4,
+        ).tolist()
+        compressor_sequence_numbers = list(
+            range(1, self.number_of_compressor_speeds + 1)
+        )
+
+        condenser_liquid_volumetric_flow_rates = [
+            self.rated_condenser_volumetric_flow_rate
+        ]
+        condenser_liquid_entering_temperatures = linspace(
+            self.condenser_entering_temperature_range[0],
+            self.condenser_entering_temperature_range[1],
+            4,
+        ).tolist()
+        grid_variables = {
+            "evaporator_liquid_volumetric_flow_rate": evaporator_liquid_volumetric_flow_rates,
+            "evaporator_liquid_leaving_temperature": evaporator_liquid_leaving_temperatures,
+            "condenser_liquid_volumetric_flow_rate": condenser_liquid_volumetric_flow_rates,
+            "condenser_liquid_entering_temperature": condenser_liquid_entering_temperatures,
+            "compressor_sequence_number": compressor_sequence_numbers,
+        }
+
+        input_powers = []
+        net_evaporator_capacities = []
+        net_condenser_capacities = []
+        oil_cooler_heats = []
+        auxiliary_heats = []
+        operation_states = []
+
+        for v_evap in evaporator_liquid_volumetric_flow_rates:
+            for t_evap in evaporator_liquid_leaving_temperatures:
+                for v_cond in condenser_liquid_volumetric_flow_rates:
+                    for t_cond in condenser_liquid_entering_temperatures:
+                        for speed in [
+                            self.number_of_compressor_speeds - n
+                            for n in compressor_sequence_numbers
+                        ]:
+                            conditions = OperatingConditions(
+                                evaporator_outlet=LiquidState(
+                                    temperature=t_evap, volumetric_flow_rate=v_evap
+                                ),
+                                condenser_inlet=LiquidState(
+                                    temperature=t_cond, volumetric_flow_rate=v_cond
+                                ),
+                                compressor_speed=speed,
+                            )
+
+                            input_powers.append(self.input_power(conditions))
+                            net_evaporator_capacities.append(
+                                self.net_evaporator_capacity(conditions)
+                            )
+                            net_condenser_capacities.append(
+                                self.net_condenser_capacity(conditions)
+                            )
+                            oil_cooler_heats.append(self.oil_cooler_heat(conditions))
+                            auxiliary_heats.append(self.auxiliary_heat(conditions))
+                            operation_states.append("NORMAL")
+        lookup_variables = {
+            "input_power": input_powers,
+            "net_evaporator_capacity": net_evaporator_capacities,
+            "net_condenser_capacity": net_condenser_capacities,
+            "oil_cooler_heat": oil_cooler_heats,
+            "auxiliary_heat": auxiliary_heats,
+            "operation_state": operation_states,
+        }
+
+        return {
+            "grid_variables": grid_variables,
+            "lookup_variables": lookup_variables,
+        }
+
+
+class AirCooledChiller(Chiller):
+    DEFAULT_CONDENSER_TEMPERATURE_RANGE = (
+        fr_u(55.0, "degF"),
+        fr_u(104.0, "degF"),
+    )  # (fr_u(55.0, "degF"), fr_u(115.0, "degF")) # AHRI 550/590 2023 Table 5
+
+    def make_performance_map(self) -> dict:
+        # Create conditions
+        evaporator_liquid_volumetric_flow_rates = [
+            self.rated_evaporator_volumetric_flow_rate
+        ]
+        evaporator_liquid_leaving_temperatures = linspace(
+            self.evaporator_leaving_temperature_range[0],
+            self.evaporator_leaving_temperature_range[1],
+            4,
+        ).tolist()
+        compressor_sequence_numbers = list(
+            range(1, self.number_of_compressor_speeds + 1)
+        )
+
+        condenser_air_entering_drybulb_temperatures = [
+            self.rated_condenser_volumetric_flow_rate
+        ]
+        condenser_air_entering_relative_humidities = [0.4]
+        ambient_pressures = [fr_u(1.0, "atm")]
+        grid_variables = {
+            "evaporator_liquid_volumetric_flow_rate": evaporator_liquid_volumetric_flow_rates,
+            "evaporator_liquid_leaving_temperature": evaporator_liquid_leaving_temperatures,
+            "condenser_air_entering_drybulb_temperature": condenser_air_entering_drybulb_temperatures,
+            "condenser_air_entering_relative_humidity": condenser_air_entering_relative_humidities,
+            "ambient_pressure": ambient_pressures,
+            "compressor_sequence_number": compressor_sequence_numbers,
+        }
+
+        input_powers = []
+        net_evaporator_capacities = []
+        net_condenser_capacities = []
+        oil_cooler_heats = []
+        auxiliary_heats = []
+        operation_states = []
+        condenser_air_volumetric_flow_rates = []
+        evaporation_rates = []
+
+        for v_evap in evaporator_liquid_volumetric_flow_rates:
+            for t_evap in evaporator_liquid_leaving_temperatures:
+                for t_cond in condenser_air_entering_drybulb_temperatures:
+                    for rh_cond in condenser_air_entering_relative_humidities:
+                        for p_cond in ambient_pressures:
+                            for speed in [
+                                self.number_of_compressor_speeds - n
+                                for n in compressor_sequence_numbers
+                            ]:
+                                conditions = OperatingConditions(
+                                    evaporator_outlet=LiquidState(
+                                        temperature=t_evap,
+                                        volumetric_flow_rate=v_evap,
+                                    ),
+                                    condenser_inlet=PsychrometricState(
+                                        temperature=t_cond,
+                                        relative_humidity=rh_cond,
+                                        ambient_pressure=p_cond,
+                                    ),
+                                    compressor_speed=speed,
+                                )
+
+                                input_powers.append(self.input_power(conditions))
+                                net_evaporator_capacities.append(
+                                    self.net_evaporator_capacity(conditions)
+                                )
+                                net_condenser_capacities.append(
+                                    self.net_condenser_capacity(conditions)
+                                )
+                                condenser_air_volumetric_flow_rates.append(
+                                    self.condenser_air_volumetric_flow_rates(conditions)
+                                )
+                                oil_cooler_heats.append(
+                                    self.oil_cooler_heat(conditions)
+                                )
+                                evaporation_rates.append(
+                                    self.evaporation_rate(conditions)
+                                )
+                                auxiliary_heats.append(self.auxiliary_heat(conditions))
+                                operation_states.append("NORMAL")
+
+        lookup_variables = {
+            "input_power": input_powers,
+            "net_evaporator_capacity": net_evaporator_capacities,
+            "net_condenser_capacity": net_condenser_capacities,
+            "condenser_air_volumetric_flow_rate": condenser_air_volumetric_flow_rates,
+            "oil_cooler_heat": oil_cooler_heats,
+            "evaporation_rate": evaporation_rates,
+            "auxiliary_heat": auxiliary_heats,
+            "operation_state": operation_states,
+        }
+
+        return {
+            "grid_variables": grid_variables,
+            "lookup_variables": lookup_variables,
+        }

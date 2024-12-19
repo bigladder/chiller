@@ -3,7 +3,7 @@ import CoolProp.CoolProp as CP
 from koozie import fr_u
 
 
-class FluidState:
+class LiquidState:
     def __init__(
         self,
         temperature,
@@ -58,7 +58,9 @@ class FluidState:
         self.V_dot_set = True
 
     def add_heat(self, heat):
-        return FluidState(temperature=self.T + heat / self.c, mass_flow_rate=self.m_dot)
+        return LiquidState(
+            temperature=self.T + heat / self.c, mass_flow_rate=self.m_dot
+        )
 
     def get_heat(self, other_state):
         '''returns the amount of heat difference between this state and "other state"'''

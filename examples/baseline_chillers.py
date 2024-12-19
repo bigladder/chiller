@@ -1,5 +1,5 @@
 from chiller import Chiller
-from chiller.models.ashrae_90_1 import ASHRAE90_1, CondenserType
+from chiller.models.ashrae_90_1 import ASHRAE90_1BaselineChiller, CondenserType
 from hashlib import sha256
 
 from koozie import fr_u
@@ -37,14 +37,13 @@ with open('examples/90.1-chillers.csv') as file:
 """
 
 
-for chiller in ASHRAE90_1.chiller_curve_sets:
-    if chiller.condenser_type == CondenserType.LIQUID_COOLED:
+for chiller in ASHRAE90_1BaselineChiller.chiller_curve_sets:
+    if chiller.condenser_type == CondenserType.LIQUID:
         if chiller.maximum_capacity == float("inf"):
             size = chiller.minimum_capacity + fr_u(50.0, "ton_ref")
         else:
             size = (chiller.minimum_capacity + chiller.maximum_capacity) * 0.5
-        new_chiller = Chiller(
-            model=ASHRAE90_1(),
+        new_chiller = ASHRAE90_1BaselineChiller(
             rated_net_evaporator_capacity=size,
             rated_cop=chiller.cop,
             path_type=chiller.path_type,
