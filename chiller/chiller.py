@@ -21,36 +21,12 @@ class CondenserType(Enum):
     EVAPORATIVE = 3
 
 
-condenser_type_text = {
-    CondenserType.LIQUID: "liquid-cooled",
-    CondenserType.AIR: "air-cooled",
-    CondenserType.EVAPORATIVE: "evaporatively-cooled",
-}
-
-
 class CompressorType(Enum):
     UNKNOWN = 0
     CENTRIFUGAL = 1
     POSITIVE_DISPLACEMENT = 2
     SCREW = 3
     SCROLL = 4
-
-
-compressor_type_map = {
-    CompressorType.UNKNOWN: None,
-    CompressorType.CENTRIFUGAL: "CENTRIFUGAL",
-    CompressorType.POSITIVE_DISPLACEMENT: "SCROLL",
-    CompressorType.SCREW: "SCREW",
-    CompressorType.SCROLL: "SCROLL",
-}
-
-compressor_type_text = {
-    CompressorType.UNKNOWN: "",
-    CompressorType.CENTRIFUGAL: "centrifugal",
-    CompressorType.POSITIVE_DISPLACEMENT: "positive displacement",
-    CompressorType.SCREW: "screw",
-    CompressorType.SCROLL: "scroll",
-}
 
 
 class ChillerMetadata:
@@ -73,6 +49,8 @@ class ChillerMetadata:
 
 
 class Chiller:
+    DEFAULT_CONDENSER_TEMPERATURE_RANGE: tuple[float, float]
+
     def __init__(
         self,
         rated_net_evaporator_capacity=fr_u(100.0, "ton_ref"),
