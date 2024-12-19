@@ -60,7 +60,7 @@ for chiller in ASHRAE90_1BaselineChiller.chiller_curve_sets:
             < 0.01 * size
         )
 
-        new_chiller.metadata.data_version = 2  # TODO: Update when necessary
+        new_chiller.metadata.data_version = 3  # TODO: Update when necessary
         unique_characteristics = (
             chiller.set_name,
             new_chiller.rated_net_evaporator_capacity,

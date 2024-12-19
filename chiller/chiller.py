@@ -60,8 +60,8 @@ class Chiller:
         rated_net_condenser_capacity=None,
         number_of_compressor_speeds=None,
         evaporator_leaving_temperature_range=(
-            fr_u(39.0, "°F"),  # fr_u(36.0, "°F"),
-            fr_u(60.0, "°F"),  # fr_u(70.0, "°F"),
+            fr_u(36.0, "°F"),
+            fr_u(70.0, "°F"),
         ),  # AHRI 550/590 2023 Table 5
         condenser_entering_temperature_range=None,
         condenser_type=CondenserType.LIQUID,
@@ -85,8 +85,6 @@ class Chiller:
         self.set_rated_condenser_volumetric_flow_rate()
 
         self.metadata = ChillerMetadata()
-
-    # TODO: Apply pressure corrections per 550/590 Appendix C
 
     def net_evaporator_capacity(self, conditions):
         raise NotImplementedError()
@@ -150,7 +148,7 @@ class Chiller:
         metadata = {
             "data_model": "ASHRAE_205",
             "schema": "RS0001",
-            "schema_version": "2.0.0",
+            "schema_version": "3.0.0",
             "description": self.metadata.description,
             "id": unique_id,
             "data_timestamp": f"{timestamp}Z",
@@ -280,8 +278,8 @@ class Chiller:
 class LiquidCooledChiller(Chiller):
     DEFAULT_CONDENSER_TEMPERATURE_RANGE = (
         fr_u(55.0, "degF"),
-        fr_u(104.0, "degF"),
-    )  # (fr_u(55.0, "degF"), fr_u(115.0, "degF")) # AHRI 550/590 2023 Table 5
+        fr_u(115.0, "degF"),
+    )  # AHRI 550/590 2023 Table 5
 
     def __init__(
         self,
@@ -445,10 +443,13 @@ class LiquidCooledChiller(Chiller):
 
 
 class AirCooledChiller(Chiller):
+
+    # TODO: Apply pressure corrections per 550/590 Appendix C
+
     DEFAULT_CONDENSER_TEMPERATURE_RANGE = (
         fr_u(55.0, "degF"),
-        fr_u(104.0, "degF"),
-    )  # (fr_u(55.0, "degF"), fr_u(115.0, "degF")) # AHRI 550/590 2023 Table 5
+        fr_u(125.6, "degF"),
+    )  # AHRI 550/590 2023 Table 5
 
     def make_performance_map(self) -> dict:
         # Create conditions
