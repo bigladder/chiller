@@ -1,8 +1,18 @@
 from typing import Type
+from copy import deepcopy
 
 from koozie import to_u, fr_u
 
-from ..chiller import Chiller, LiquidCooledChiller, CondenserType, AirCooledChiller
+from ..chiller import (
+    Chiller,
+    LiquidCooledChiller,
+    CondenserType,
+    AirCooledChiller,
+    AHRI_550_590_AIR_COOLED_CONDITIONS,
+    AHRI_550_590_LIQUID_COOLED_CONDITIONS,
+    AHRI_550_590_LIQUID_COOLED_CONDENSER_OUTLET,
+    OperatingConditions,
+)
 from ..util import calc_biquad, calc_cubic
 
 
@@ -17,9 +27,11 @@ class EnergyPlusEIR(Chiller):
         capacity_temperature_coefficients,
         minimum_part_load_ratio,
         minimum_unloading_ratio,
+        cycling_degradation_coefficient=0.0,
+        standby_power=0.0,
+        space_gain_fraction=0.0,
         oil_cooler_fraction=0.0,
         auxiliary_fraction=0.0,
-        space_gain_fraction=0.0,
     ) -> None:
         self.capacity_temperature_coefficients = capacity_temperature_coefficients
         self.eir_temperature_coefficients = eir_temperature_coefficients
@@ -62,8 +74,15 @@ class EnergyPlusEIR(Chiller):
         self.chiller_type: Type[Chiller]
         if condenser_type == CondenserType.LIQUID:
             self.chiller_type = LiquidCooledChiller
+            self.rated_operating_conditions = deepcopy(
+                AHRI_550_590_LIQUID_COOLED_CONDITIONS
+            )
         else:
             self.chiller_type = AirCooledChiller
+            self.rated_operating_conditions = deepcopy(
+                AHRI_550_590_AIR_COOLED_CONDITIONS
+            )
+
         super().__init__(
             rated_net_evaporator_capacity=rated_net_evaporator_capacity,
             rated_cop=rated_cop,
@@ -71,11 +90,19 @@ class EnergyPlusEIR(Chiller):
             rated_net_condenser_capacity=rated_net_condenser_capacity,
             number_of_compressor_speeds=number_of_compressor_speeds,
             condenser_entering_temperature_range=self.chiller_type.DEFAULT_CONDENSER_TEMPERATURE_RANGE,
+            cycling_degradation_coefficient=cycling_degradation_coefficient,
+            standby_power=standby_power
         )
+
+        if condenser_type == CondenserType.LIQUID:
+            self.rated_condenser_outlet_state = (
+                AHRI_550_590_LIQUID_COOLED_CONDENSER_OUTLET
+            )
+            self.set_rated_condenser_volumetric_flow_rate()
 
     def net_evaporator_capacity(self, conditions=None):
         if conditions is None:
-            conditions = self.get_default_conditions()
+            conditions = self.rated_operating_conditions
         coeffs = self.capacity_temperature_coefficients
         capacity_temperature_multiplier = calc_biquad(
             coeffs,
@@ -90,7 +117,7 @@ class EnergyPlusEIR(Chiller):
 
     def input_power(self, conditions=None):
         if conditions is None:
-            conditions = self.get_default_conditions()
+            conditions = self.rated_operating_conditions
         cap = self.net_evaporator_capacity(conditions)
         coeffs = self.eir_temperature_coefficients
         eir_temperature_multplier = calc_biquad(
@@ -113,28 +140,28 @@ class EnergyPlusEIR(Chiller):
 
     def net_condenser_capacity(self, conditions=None):
         if conditions is None:
-            conditions = self.get_default_conditions()
+            conditions = self.rated_operating_conditions
         return (
             self.input_power(conditions) + self.net_evaporator_capacity(conditions)
         ) * (1.0 - self.loss_fraction_sum)
 
     def oil_cooler_heat(self, conditions=None):
         if conditions is None:
-            conditions = self.get_default_conditions()
+            conditions = self.rated_operating_conditions
         return (
             self.input_power(conditions) + self.net_evaporator_capacity(conditions)
         ) * self.oil_cooler_fraction
 
     def auxiliary_heat(self, conditions=None):
         if conditions is None:
-            conditions = self.get_default_conditions()
+            conditions = self.rated_operating_conditions
         return (
             self.input_power(conditions) + self.net_evaporator_capacity(conditions)
         ) * self.auxiliary_fraction
 
     def part_load_ratio(self, conditions=None):
         if conditions is None:
-            conditions = self.get_default_conditions()
+            conditions = self.rated_operating_conditions
         if self.minimum_part_load_ratio < self.minimum_unloading_ratio:
             minimum_speed = self.number_of_compressor_speeds - 2
         else:
@@ -150,14 +177,26 @@ class EnergyPlusEIR(Chiller):
                 / minimum_speed
             )
 
+    def condenser_air_volumetric_flow_rate(
+        self, conditions: OperatingConditions | None = None
+    ) -> float:
+        if self.condenser_type != CondenserType.LIQUID:
+            return AirCooledChiller.condenser_air_volumetric_flow_rate(self, conditions)
+        else:
+            raise RuntimeError(f"Function not provided for this type of condenser.")
+
+    def evaporation_rate(self, conditions: OperatingConditions | None = None) -> float:
+        if self.condenser_type != CondenserType.LIQUID:
+            return AirCooledChiller.evaporation_rate(self, conditions)
+        else:
+            raise RuntimeError(f"Function not provided for this type of condenser.")
+
     def set_rated_evaporator_volumetric_flow_rate(self):
-        if self.condenser_type == CondenserType.LIQUID:
-            LiquidCooledChiller.set_rated_evaporator_volumetric_flow_rate(self)
+        self.chiller_type.set_rated_evaporator_volumetric_flow_rate(self)
 
     def set_rated_condenser_volumetric_flow_rate(self):
         if self.condenser_type == CondenserType.LIQUID:
             LiquidCooledChiller.set_rated_condenser_volumetric_flow_rate(self)
 
     def make_performance_map(self):
-        if self.condenser_type == CondenserType.LIQUID:
-            return LiquidCooledChiller.make_performance_map(self)
+        return self.chiller_type.make_performance_map(self)

@@ -38,47 +38,46 @@ with open('examples/90.1-chillers.csv') as file:
 
 
 for chiller in ASHRAE90_1BaselineChiller.chiller_curve_sets:
-    if chiller.condenser_type == CondenserType.LIQUID:
-        if chiller.maximum_capacity == float("inf"):
-            size = chiller.minimum_capacity + fr_u(50.0, "ton_ref")
-        else:
-            size = (chiller.minimum_capacity + chiller.maximum_capacity) * 0.5
-        new_chiller = ASHRAE90_1BaselineChiller(
-            rated_net_evaporator_capacity=size,
-            rated_cop=chiller.cop,
-            path_type=chiller.path_type,
-            condenser_type=chiller.condenser_type,
-            compressor_type=chiller.compressor_type,
+    if chiller.maximum_capacity == float("inf"):
+        size = chiller.minimum_capacity + fr_u(50.0, "ton_ref")
+    else:
+        size = (chiller.minimum_capacity + chiller.maximum_capacity) * 0.5
+    new_chiller = ASHRAE90_1BaselineChiller(
+        rated_net_evaporator_capacity=size,
+        rated_cop=chiller.cop,
+        path_type=chiller.path_type,
+        condenser_type=chiller.condenser_type,
+        compressor_type=chiller.compressor_type,
+    )
+
+    assert abs(new_chiller.cop() - new_chiller.rated_cop) < 0.05
+    assert (
+        abs(
+            new_chiller.net_evaporator_capacity()
+            - new_chiller.rated_net_evaporator_capacity
         )
+        < 0.01 * size
+    )
 
-        assert abs(new_chiller.cop() - new_chiller.rated_cop) < 0.05
-        assert (
-            abs(
-                new_chiller.net_evaporator_capacity()
-                - new_chiller.rated_net_evaporator_capacity
-            )
-            < 0.01 * size
-        )
+    new_chiller.metadata.data_version = 3  # TODO: Update when necessary
+    unique_characteristics = (
+        chiller.set_name,
+        new_chiller.rated_net_evaporator_capacity,
+    )
+    new_chiller.metadata.uuid_seed = sha256(
+        f"{unique_characteristics}".encode()
+    ).hexdigest()
 
-        new_chiller.metadata.data_version = 3  # TODO: Update when necessary
-        unique_characteristics = (
-            chiller.set_name,
-            new_chiller.rated_net_evaporator_capacity,
-        )
-        new_chiller.metadata.uuid_seed = sha256(
-            f"{unique_characteristics}".encode()
-        ).hexdigest()
+    representation = new_chiller.generate_205_representation()
 
-        representation = new_chiller.generate_205_representation()
+    output_directory_path = "output"
+    file_name = f"ASHRAE90-1-2022-AppJ-Curve-Set-{chiller.set_name}.RS0001.a205"
 
-        output_directory_path = "output"
-        file_name = f"ASHRAE90-1-2019-bd-Curve-Set-{chiller.set_name}.RS0001.a205"
+    # with open(f"{output_directory_path}/{file_name}.yaml", "w") as file:
+    #   yaml.dump(representation, file, sort_keys=False)
 
-        # with open(f"{output_directory_path}/{file_name}.yaml", "w") as file:
-        #   yaml.dump(representation, file, sort_keys=False)
+    # with open(f"{output_directory_path}/{file_name}.cbor", "wb") as file:
+    #   cbor2.dump(representation, file)
 
-        # with open(f"{output_directory_path}/{file_name}.cbor", "wb") as file:
-        #   cbor2.dump(representation, file)
-
-        with open(f"{output_directory_path}/{file_name}.json", "w") as file:
-            json.dump(representation, file, indent=4)
+    with open(f"{output_directory_path}/{file_name}.json", "w") as file:
+        json.dump(representation, file, indent=4)

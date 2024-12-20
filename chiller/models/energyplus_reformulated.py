@@ -38,7 +38,7 @@ class EnergyPlusReformulatedEIR(EnergyPlusEIR):
 
     def net_evaporator_capacity(self, conditions=None):
         if conditions is None:
-            conditions = self.get_default_conditions()
+            conditions = self.rated_operating_conditions
         guess_capacity = self.rated_net_evaporator_capacity * self.part_load_ratio(
             conditions
         )
@@ -56,7 +56,7 @@ class EnergyPlusReformulatedEIR(EnergyPlusEIR):
 
     def input_power(self, conditions=None):
         if conditions is None:
-            conditions = self.get_default_conditions()
+            conditions = self.rated_operating_conditions
         evaporator_capacity = self.net_evaporator_capacity(conditions)
         return self.calculate_input_power(
             conditions, self.condenser_leaving_temperature, evaporator_capacity

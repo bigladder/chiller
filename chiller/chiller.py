@@ -1,19 +1,27 @@
 from enum import Enum
-
-from .fluid_properties import LiquidState
-from .psychrometrics import PsychrometricState
-from .conditions import (
-    AHRI_550_590_LIQUID_COOLED_CONDITIONS,
-    AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET,
-    AHRI_550_590_EVAPORATOR_INLET,
-    OperatingConditions,
-)
-from koozie import fr_u
-from numpy import linspace
 import uuid
 import datetime
 from random import Random
+from copy import deepcopy
+from typing import NamedTuple
 
+from numpy import linspace
+
+from koozie import fr_u
+
+from .fluid_properties import LiquidState, PsychrometricState
+from .conditions import (
+    AHRI_550_590_LIQUID_COOLED_CONDITIONS,
+    AHRI_550_590_LIQUID_COOLED_CONDENSER_OUTLET,
+    AHRI_550_590_AIR_COOLED_CONDITIONS,
+    AHRI_550_590_EVAPORATOR_INLET,
+    OperatingConditions,
+)
+
+
+class FloatRange(NamedTuple):
+    min: float|None
+    max: float|None
 
 class CondenserType(Enum):
     LIQUID = 1
@@ -27,6 +35,15 @@ class CompressorType(Enum):
     POSITIVE_DISPLACEMENT = 2
     SCREW = 3
     SCROLL = 4
+
+
+compressor_type_map = {
+    CompressorType.UNKNOWN: None,
+    CompressorType.CENTRIFUGAL: "CENTRIFUGAL",
+    CompressorType.POSITIVE_DISPLACEMENT: "SCROLL",
+    CompressorType.SCREW: "SCREW",
+    CompressorType.SCROLL: "SCROLL",
+}
 
 
 class ChillerMetadata:
@@ -49,7 +66,8 @@ class ChillerMetadata:
 
 
 class Chiller:
-    DEFAULT_CONDENSER_TEMPERATURE_RANGE: tuple[float, float]
+    DEFAULT_CONDENSER_TEMPERATURE_RANGE: FloatRange
+    rated_operating_conditions: OperatingConditions
 
     def __init__(
         self,
@@ -59,7 +77,7 @@ class Chiller:
         standby_power=0.0,
         rated_net_condenser_capacity=None,
         number_of_compressor_speeds=None,
-        evaporator_leaving_temperature_range=(
+        evaporator_leaving_temperature_range=FloatRange(
             fr_u(36.0, "°F"),
             fr_u(70.0, "°F"),
         ),  # AHRI 550/590 2023 Table 5
@@ -81,8 +99,9 @@ class Chiller:
         self.evaporator_leaving_temperature_range = evaporator_leaving_temperature_range
         self.condenser_entering_temperature_range = condenser_entering_temperature_range
 
+        self.rated_evaporator_inlet_state = deepcopy(AHRI_550_590_EVAPORATOR_INLET)
+
         self.set_rated_evaporator_volumetric_flow_rate()
-        self.set_rated_condenser_volumetric_flow_rate()
 
         self.metadata = ChillerMetadata()
 
@@ -124,18 +143,25 @@ class Chiller:
         )
 
     def set_rated_evaporator_volumetric_flow_rate(self):
-        raise NotImplementedError()
-
-    def set_rated_condenser_volumetric_flow_rate(self):
-        raise NotImplementedError()
+        delta_T = (
+            self.rated_evaporator_inlet_state.T
+            - self.rated_operating_conditions.evaporator_outlet.T
+        )
+        m_dot = self.rated_net_evaporator_capacity / (
+            self.rated_operating_conditions.evaporator_outlet.cp * delta_T
+        )
+        self.rated_operating_conditions.evaporator_outlet.m_dot = m_dot
+        self.rated_evaporator_inlet_state.m_dot = m_dot
 
     def get_default_conditions(self):
         if self.condenser_type == CondenserType.LIQUID:
             return AHRI_550_590_LIQUID_COOLED_CONDITIONS
+        else:
+            return AHRI_550_590_AIR_COOLED_CONDITIONS
 
     def generate_205_representation(
         self,
-        capacity_range: tuple[float | None, float | None] = (None, None),
+        capacity_range: FloatRange = FloatRange(None, None),
     ) -> dict:
         # Metadata
         timestamp = datetime.datetime.now().isoformat("T", "minutes")
@@ -161,9 +187,13 @@ class Chiller:
             "product_information": {
                 "liquid_data_source": "CoolProp",
                 "hot_gas_bypass_installed": self.metadata.has_hot_gas_bypass_installed,
-                "compressor_type": self.compressor_type.name,
             }
         }
+
+        if self.compressor_type != CompressorType.UNKNOWN:
+            representation_description["product_information"]["compressor_type"] = (
+                compressor_type_map[self.compressor_type]
+            )
 
         performance_map_cooling = self.make_performance_map()
 
@@ -175,7 +205,8 @@ class Chiller:
         ]["evaporator_liquid_leaving_temperature"]
 
         performance = {
-            "condesner_type": self.condenser_type.name,
+            "compressor_speed_control_type": "CONTINUOUS",
+            "cycling_degradation_coefficient": self.cycling_degradation_coefficient,
             "evaporator_liquid_type": {  # TODO: Make consistent with model
                 "liquid_components": [
                     {
@@ -186,17 +217,6 @@ class Chiller:
                 "concentration_type": "BY_VOLUME",
             },
             "evaporator_fouling_factor": 0.0,
-            "compressor_speed_control_type": "CONTINUOUS",
-            "cycling_degradation_coefficient": self.cycling_degradation_coefficient,
-            "performance_map_cooling": performance_map_cooling,
-            "performance_map_standby": {
-                "grid_variables": {
-                    "environment_dry_bulb_temperature": [fr_u(20.0, "°C")],
-                },
-                "lookup_variables": {
-                    "input_power": [self.standby_power],
-                },
-            },
             "performance_map_evaporator_liquid_pressure_differential": {
                 "grid_variables": {
                     "evaporator_liquid_volumetric_flow_rate": evaporator_liquid_volumetric_flow_rates,
@@ -210,6 +230,7 @@ class Chiller:
                     ),
                 },
             },
+            "condenser_type": self.condenser_type.name,
         }
 
         if self.condenser_type == CondenserType.LIQUID:
@@ -219,46 +240,66 @@ class Chiller:
             condenser_liquid_entering_temperatures = performance_map_cooling[
                 "grid_variables"
             ]["condenser_liquid_entering_temperature"]
-            performance["condenser_liquid_type"] = {  # TODO: Make consistent with model
-                "liquid_components": [
-                    {
-                        "liquid_constituent": "WATER",
-                        "concentration": 1.0,
-                    }
-                ],
-                "concentration_type": "BY_VOLUME",
-            }
-            performance["condenser_fouling_factor"] = 0.0
-            performance["performance_map_condenser_liquid_pressure_differential"] = {
-                "grid_variables": {
-                    "condenser_liquid_volumetric_flow_rate": condenser_liquid_volumetric_flow_rates,
-                    "condenser_liquid_entering_temperature": condenser_liquid_entering_temperatures,
+            performance.update(
+                {
+                    "condenser_liquid_type": {  # TODO: Make consistent with model
+                        "liquid_components": [
+                            {
+                                "liquid_constituent": "WATER",
+                                "concentration": 1.0,
+                            }
+                        ],
+                        "concentration_type": "BY_VOLUME",
+                    },
+                    "condenser_fouling_factor": 0.0,
+                    "performance_map_condenser_liquid_pressure_differential": {
+                        "grid_variables": {
+                            "condenser_liquid_volumetric_flow_rate": condenser_liquid_volumetric_flow_rates,
+                            "condenser_liquid_entering_temperature": condenser_liquid_entering_temperatures,
+                        },
+                        "lookup_variables": {
+                            "condenser_liquid_differential_pressure": [
+                                fr_u(15.0, "kPa")
+                            ]
+                            * (
+                                len(condenser_liquid_volumetric_flow_rates)
+                                * len(condenser_liquid_entering_temperatures)
+                            ),
+                        },
+                    },
+                }
+            )
+
+        performance.update(
+            {
+                "performance_map_cooling": performance_map_cooling,
+                "performance_map_standby": {
+                    "grid_variables": {
+                        "environment_dry_bulb_temperature": [fr_u(20.0, "°C")],
+                    },
+                    "lookup_variables": {
+                        "input_power": [self.standby_power],
+                    },
                 },
-                "lookup_variables": {
-                    "condenser_liquid_differential_pressure": [fr_u(15.0, "kPa")]
-                    * (
-                        len(condenser_liquid_volumetric_flow_rates)
-                        * len(condenser_liquid_entering_temperatures)
-                    ),
-                },
             }
+        )
 
         # Scaling
-        if capacity_range[0] is not None or capacity_range[1] is not None:
+        if capacity_range.min is not None or capacity_range.max is not None:
             scaling = {}
 
-            if capacity_range[0] is None:
+            if capacity_range.min is None:
                 scaling["minimum"] = 1.0
-            elif capacity_range[0] > 0.0:
+            elif capacity_range.min > 0.0:
                 scaling["minimum"] = (
-                    capacity_range[0] / self.rated_net_evaporator_capacity
+                    capacity_range.min / self.rated_net_evaporator_capacity
                 )
 
-            if capacity_range[1] is None:
+            if capacity_range.max is None:
                 scaling["maximum"] = 1.0
-            elif capacity_range[1] != float("inf"):
+            elif capacity_range.max != float("inf"):
                 scaling["maximum"] = (
-                    capacity_range[1] / self.rated_net_evaporator_capacity
+                    capacity_range.max / self.rated_net_evaporator_capacity
                 )
 
             performance["scaling"] = scaling
@@ -276,7 +317,7 @@ class Chiller:
 
 
 class LiquidCooledChiller(Chiller):
-    DEFAULT_CONDENSER_TEMPERATURE_RANGE = (
+    DEFAULT_CONDENSER_TEMPERATURE_RANGE = FloatRange(
         fr_u(55.0, "degF"),
         fr_u(115.0, "degF"),
     )  # AHRI 550/590 2023 Table 5
@@ -303,73 +344,66 @@ class LiquidCooledChiller(Chiller):
             condenser_type=CondenserType.LIQUID,
             compressor_type=compressor_type,
         )
+        self.rated_operating_conditions = deepcopy(
+            AHRI_550_590_LIQUID_COOLED_CONDITIONS
+        )
+        self.rated_condenser_outlet_state = deepcopy(
+            AHRI_550_590_LIQUID_COOLED_CONDENSER_OUTLET
+        )
 
-    def net_evaporator_capacity(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+        self.set_rated_condenser_volumetric_flow_rate()
+
+    def net_evaporator_capacity(self, conditions):
         raise NotImplementedError()
 
-    def input_power(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+    def input_power(self, conditions):
         raise NotImplementedError()
 
-    def net_condenser_capacity(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+    def net_condenser_capacity(self, conditions):
         raise NotImplementedError()
 
-    def oil_cooler_heat(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+    def oil_cooler_heat(self, conditions):
         raise NotImplementedError()
 
-    def auxiliary_heat(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+    def auxiliary_heat(self, conditions):
         raise NotImplementedError()
 
-    def condenser_liquid_leaving_state(
-        self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS
-    ):
+    def condenser_liquid_leaving_state(self, conditions=None):
+        if conditions is None:
+            conditions = self.rated_operating_conditions
         return conditions.condenser_inlet.add_heat(
             self.net_condenser_capacity(conditions)
         )
 
-    def evaporator_liquid_entering_state(
-        self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS
-    ):
+    def evaporator_liquid_entering_state(self, conditions=None):
+        if conditions is None:
+            conditions = self.rated_operating_conditions
         return super().evaporator_liquid_entering_state(conditions)
 
-    def space_loss_heat(self, conditions=AHRI_550_590_LIQUID_COOLED_CONDITIONS):
+    def space_loss_heat(self, conditions=None):
+        if conditions is None:
+            conditions = self.rated_operating_conditions
         return super().space_loss_heat(conditions)
-
-    def set_rated_evaporator_volumetric_flow_rate(self):
-        delta_T = (
-            AHRI_550_590_EVAPORATOR_INLET.T
-            - AHRI_550_590_LIQUID_COOLED_CONDITIONS.evaporator_outlet.T
-        )
-        m_dot = self.rated_net_evaporator_capacity / (
-            AHRI_550_590_LIQUID_COOLED_CONDITIONS.evaporator_outlet.get_cp() * delta_T
-        )
-        AHRI_550_590_LIQUID_COOLED_CONDITIONS.evaporator_outlet.set_m_dot(m_dot)
-        AHRI_550_590_EVAPORATOR_INLET.set_m_dot(m_dot)
-        self.rated_evaporator_volumetric_flow_rate = (
-            AHRI_550_590_LIQUID_COOLED_CONDITIONS.evaporator_outlet.V_dot
-        )
 
     def set_rated_condenser_volumetric_flow_rate(self):
         delta_T = (
-            AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET.T
-            - AHRI_550_590_LIQUID_COOLED_CONDITIONS.condenser_inlet.T
+            self.rated_condenser_outlet_state.T
+            - self.rated_operating_conditions.condenser_inlet.T
         )
         m_dot = self.rated_net_condenser_capacity / (
-            AHRI_550_590_LIQUID_COOLED_CONDITIONS.condenser_inlet.get_cp() * delta_T
+            self.rated_operating_conditions.condenser_inlet.cp * delta_T
         )
-        AHRI_550_590_LIQUID_COOLED_CONDITIONS.condenser_inlet.set_m_dot(m_dot)
-        AHRI_550_590_WATER_COOLED_CONDENSER_OUTLET.set_m_dot(m_dot)
-        self.rated_condenser_volumetric_flow_rate = (
-            AHRI_550_590_LIQUID_COOLED_CONDITIONS.condenser_inlet.V_dot
-        )
+        self.rated_operating_conditions.condenser_inlet.m_dot = m_dot
+        self.rated_condenser_outlet_state.m_dot = m_dot
 
     def make_performance_map(self) -> dict:
         # Create conditions
         evaporator_liquid_volumetric_flow_rates = [
-            self.rated_evaporator_volumetric_flow_rate
+            self.rated_operating_conditions.evaporator_outlet.V_dot
         ]
         evaporator_liquid_leaving_temperatures = linspace(
-            self.evaporator_leaving_temperature_range[0],
-            self.evaporator_leaving_temperature_range[1],
+            self.evaporator_leaving_temperature_range.min,
+            self.evaporator_leaving_temperature_range.max,
             4,
         ).tolist()
         compressor_sequence_numbers = list(
@@ -377,11 +411,11 @@ class LiquidCooledChiller(Chiller):
         )
 
         condenser_liquid_volumetric_flow_rates = [
-            self.rated_condenser_volumetric_flow_rate
+            self.rated_operating_conditions.condenser_inlet.V_dot
         ]
         condenser_liquid_entering_temperatures = linspace(
-            self.condenser_entering_temperature_range[0],
-            self.condenser_entering_temperature_range[1],
+            self.condenser_entering_temperature_range.min,
+            self.condenser_entering_temperature_range.max,
             4,
         ).tolist()
         grid_variables = {
@@ -446,28 +480,77 @@ class AirCooledChiller(Chiller):
 
     # TODO: Apply pressure corrections per 550/590 Appendix C
 
-    DEFAULT_CONDENSER_TEMPERATURE_RANGE = (
+    DEFAULT_CONDENSER_TEMPERATURE_RANGE = FloatRange(
         fr_u(55.0, "degF"),
         fr_u(125.6, "degF"),
     )  # AHRI 550/590 2023 Table 5
 
+    def __init__(
+        self,
+        rated_net_evaporator_capacity=fr_u(100, "ton_ref"),
+        rated_cop=2,
+        cycling_degradation_coefficient=0,
+        standby_power=0,
+        rated_net_condenser_capacity=None,
+        number_of_compressor_speeds=None,
+        evaporator_leaving_temperature_range=FloatRange(fr_u(36, "°F"), fr_u(70, "°F")),
+        condenser_entering_temperature_range=None,
+        compressor_type=CompressorType.UNKNOWN,
+    ):
+        super().__init__(
+            rated_net_evaporator_capacity,
+            rated_cop,
+            cycling_degradation_coefficient,
+            standby_power,
+            rated_net_condenser_capacity,
+            number_of_compressor_speeds,
+            evaporator_leaving_temperature_range,
+            condenser_entering_temperature_range,
+            CondenserType.AIR,
+            compressor_type,
+        )
+
+        self.rated_operating_conditions = deepcopy(AHRI_550_590_AIR_COOLED_CONDITIONS)
+
+    def condenser_air_volumetric_flow_rate(
+        self, conditions: OperatingConditions | None = None
+    ) -> float:
+        if conditions is None:
+            conditions = self.rated_operating_conditions
+        speed = conditions.compressor_speed
+        rated_conditions_at_speed = OperatingConditions(
+            condenser_inlet=self.rated_operating_conditions.condenser_inlet,
+            evaporator_outlet=self.rated_operating_conditions.evaporator_outlet,
+            compressor_speed=speed,
+        )
+        return fr_u(900, "cfm/ton_ref") * self.net_evaporator_capacity(
+            rated_conditions_at_speed
+        )
+
+    def evaporation_rate(self, conditions: OperatingConditions | None = None) -> float:
+        if conditions is None:
+            conditions = self.rated_operating_conditions
+        return 0.0
+
     def make_performance_map(self) -> dict:
         # Create conditions
         evaporator_liquid_volumetric_flow_rates = [
-            self.rated_evaporator_volumetric_flow_rate
+            self.rated_operating_conditions.evaporator_outlet.V_dot
         ]
         evaporator_liquid_leaving_temperatures = linspace(
-            self.evaporator_leaving_temperature_range[0],
-            self.evaporator_leaving_temperature_range[1],
+            self.evaporator_leaving_temperature_range.min,
+            self.evaporator_leaving_temperature_range.max,
             4,
         ).tolist()
         compressor_sequence_numbers = list(
             range(1, self.number_of_compressor_speeds + 1)
         )
 
-        condenser_air_entering_drybulb_temperatures = [
-            self.rated_condenser_volumetric_flow_rate
-        ]
+        condenser_air_entering_drybulb_temperatures = linspace(
+            self.condenser_entering_temperature_range.min,
+            self.condenser_entering_temperature_range.max,
+            4,
+        ).tolist()
         condenser_air_entering_relative_humidities = [0.4]
         ambient_pressures = [fr_u(1.0, "atm")]
         grid_variables = {
@@ -503,9 +586,9 @@ class AirCooledChiller(Chiller):
                                         volumetric_flow_rate=v_evap,
                                     ),
                                     condenser_inlet=PsychrometricState(
-                                        temperature=t_cond,
+                                        drybulb=t_cond,
                                         relative_humidity=rh_cond,
-                                        ambient_pressure=p_cond,
+                                        pressure=p_cond,
                                     ),
                                     compressor_speed=speed,
                                 )
@@ -518,7 +601,7 @@ class AirCooledChiller(Chiller):
                                     self.net_condenser_capacity(conditions)
                                 )
                                 condenser_air_volumetric_flow_rates.append(
-                                    self.condenser_air_volumetric_flow_rates(conditions)
+                                    self.condenser_air_volumetric_flow_rate(conditions)
                                 )
                                 oil_cooler_heats.append(
                                     self.oil_cooler_heat(conditions)

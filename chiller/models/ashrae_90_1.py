@@ -7,6 +7,7 @@ from koozie import to_u
 from ..chiller import (
     CompressorType,
     CondenserType,
+    FloatRange
 )
 
 
@@ -117,6 +118,11 @@ class ASHRAE90_1BaselineChiller(EnergyPlusEIR):
         condenser_type: CondenserType,
         compressor_type: CompressorType,
         path_type,
+        cycling_degradation_coefficient=0.0,
+        standby_power=0.0,
+        space_gain_fraction=0.0,
+        oil_cooler_fraction=0.0,
+        auxiliary_fraction=0.0,
     ):
 
         self.path_type = path_type
@@ -150,7 +156,7 @@ class ASHRAE90_1BaselineChiller(EnergyPlusEIR):
             self.curve_set = matches_found[0]
 
         # scaling
-        self.capacity_range = (
+        self.capacity_range = FloatRange(
             self.curve_set.minimum_capacity,
             self.curve_set.maximum_capacity,
         )
@@ -164,6 +170,11 @@ class ASHRAE90_1BaselineChiller(EnergyPlusEIR):
             capacity_temperature_coefficients=self.curve_set.capacity_temperature_coefficients,
             minimum_part_load_ratio=0.25,
             minimum_unloading_ratio=0.25,
+            cycling_degradation_coefficient=cycling_degradation_coefficient,
+            standby_power=standby_power,
+            space_gain_fraction=space_gain_fraction,
+            oil_cooler_fraction=oil_cooler_fraction,
+            auxiliary_fraction=auxiliary_fraction,
         )
 
         self.compressor_type = compressor_type
@@ -189,10 +200,10 @@ class ASHRAE90_1BaselineChiller(EnergyPlusEIR):
         if compressor_text is not None:
             type_text += f", {compressor_text} compressor"
         type_text += f" chiller"
-        if self.capacity_range[1] == float("inf"):
-            size_description = f"{to_u(self.capacity_range[0],'ton_ref'):.1f}+"
+        if self.capacity_range.max == float("inf"):
+            size_description = f"{to_u(self.capacity_range.min,'ton_ref'):.1f}+"
         else:
-            size_description = f"{to_u(self.capacity_range[0],'ton_ref'):.1f}-{to_u(self.capacity_range[1],'ton_ref'):.1f}"
+            size_description = f"{to_u(self.capacity_range.min,'ton_ref'):.1f}-{to_u(self.capacity_range.max,'ton_ref'):.1f}"
         self.metadata.description = f"{standard_reference} '{self.curve_set.set_name}': {size_description} ton, {self.rated_cop:.2f} COP, {self.curve_set.iplv:.2f} IPLV {type_text}"
         unique_characteristics = (
             self.rated_net_evaporator_capacity,
