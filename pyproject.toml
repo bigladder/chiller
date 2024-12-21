@@ -6,7 +6,7 @@ authors = ["Big Ladder Software"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-koozie = {path = "../koozie", develop = true} #"^1.2.3"
+koozie = "^1.2.4"
 CoolProp = "^6.6.0"
 scipy = "^1.11.4"
 PsychroLib = "^2.5.0"

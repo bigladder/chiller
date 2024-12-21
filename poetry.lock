@@ -298,20 +298,18 @@ colors = ["colorama (>=0.4.6)"]
 
 [[package]]
 name = "koozie"
-version = "0.0.0"
+version = "1.2.4"
 description = "A light-weight wrapper around pint for unit conversions."
 optional = false
-python-versions = "^3.10"
-files = []
-develop = true
+python-versions = "<4.0,>=3.10"
+files = [
+    {file = "koozie-1.2.4-py3-none-any.whl", hash = "sha256:9996206c7ef67d09ad7e4a66271e1e60217a2d97e65431bd3d5ef2d3c3623e25"},
+    {file = "koozie-1.2.4.tar.gz", hash = "sha256:53c7f67263e3040b6ed62fcf600ad747f8deb858b08195ad22c77c6746b8e290"},
+]
 
 [package.dependencies]
-click = "^8.1.3"
-pint = "^0.24"
-
-[package.source]
-type = "directory"
-url = "../koozie"
+click = ">=8.1.3,<9.0.0"
+pint = ">=0.24,<0.25"
 
 [[package]]
 name = "lazy-object-proxy"
@@ -861,4 +859,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "8df5b2cb55fdb32da7b79ef0e06f64fb84d06885fb1a637e8fee52dd58242e39"
+content-hash = "f6f983094dd1ad090f60b0d485b67b8dcd7fb9391e9157b7bbe14fcf98ef2e70"
