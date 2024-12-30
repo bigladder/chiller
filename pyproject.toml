@@ -14,7 +14,7 @@ PsychroLib = "^2.5.0"
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
 pylint = "^2.7.2"
-doit = "^0.33.1"
+doit = ">0.33"
 pyyaml = "^6.0"
 cbor2 = "^5.4.3"
 
