@@ -4,16 +4,22 @@ version = "0.1.0"
 description = ""
 authors = ["Big Ladder Software"]
 
+[[tool.poetry.source]]
+name = "test-pypi"
+url = "https://test.pypi.org/simple/"
+priority = "explicit"
+
 [tool.poetry.dependencies]
-python = "^3.9"
-koozie = "^1.1.0"
-CoolProp = "^6.6.0"
+python = "^3.10"
+koozie = "^1.2.4"
+CoolProp = {version="6.6.1.post1", source = "test-pypi"} #"^6.6.0"
 scipy = "^1.11.4"
+PsychroLib = "^2.5.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.2"
 pylint = "^2.7.2"
-doit = "^0.33.1"
+doit = ">0.33"
 pyyaml = "^6.0"
 cbor2 = "^5.4.3"
 

@@ -8,7 +8,7 @@ import cbor2
 import json
 
 from chiller.models.ashrae_90_1 import (
-    ASHRAE90_1,
+    ASHRAE90_1BaselineChiller,
     CompliancePathType,
     CompressorType,
     CondenserType,
@@ -17,7 +17,7 @@ from chiller.models.ashrae_90_1 import (
 # From Large Office Reference Building
 size_tons = 40.0
 cop = 5.5
-chiller_type = "Liquid-cooled"
+condenser_type = CondenserType.LIQUID
 subtype = " "
 minimum_part_load_ratio = 0.1
 minimum_unloading_ratio = 0.2
@@ -51,10 +51,10 @@ eir_part_load_ratio_coefficients = [
 ]
 
 
-my_chiller = Chiller(
-    model=EnergyPlusReformulatedEIR(),
+my_chiller = EnergyPlusReformulatedEIR(
     rated_net_evaporator_capacity=fr_u(size_tons, "ton_ref"),
     rated_cop=cop,
+    condenser_type=condenser_type,
     minimum_part_load_ratio=minimum_part_load_ratio,
     minimum_unloading_ratio=minimum_unloading_ratio,
     capacity_temperature_coefficients=capacity_temperature_coefficients,
@@ -69,7 +69,7 @@ assert (
 # assert abs(my_chiller.cop() - my_chiller.rated_cop) < 0.05
 
 my_chiller.metadata.description = (
-    f"{size_tons:.1f} ton, {cop:.2f} COP {chiller_type}{subtype}Chiller"
+    f"{size_tons:.1f} ton, {cop:.2f} COP {condenser_type.name}{subtype}Chiller"
 )
 
 representation = my_chiller.generate_205_representation()
@@ -88,13 +88,12 @@ with open(f"{output_directory_path}/{file_name}.json", "w") as file:
 
 # For Large Office ASHRAE 90.1 Building
 
-new_chiller = Chiller(
-    model=ASHRAE90_1(),
+new_chiller = ASHRAE90_1BaselineChiller(
     rated_net_evaporator_capacity=999070.745,
     rated_cop=5.33,
     path_type=CompliancePathType.PRM,
     compressor_type=CompressorType.POSITIVE_DISPLACEMENT,
-    condenser_type=CondenserType.LIQUID_COOLED,
+    condenser_type=CondenserType.LIQUID,
 )
 
 representation = new_chiller.generate_205_representation()
@@ -110,18 +109,17 @@ with open(f"{output_directory_path}/{file_name}.cbor", "wb") as file:
 with open(f"{output_directory_path}/{file_name}.json", "w") as file:
     json.dump(representation, file, indent=4)
 
-new_chiller2 = Chiller(
-    model=ASHRAE90_1(),
+new_chiller2 = ASHRAE90_1BaselineChiller(
     rated_net_evaporator_capacity=999070.745,
     rated_cop=5.33,
+    condenser_type=CondenserType.LIQUID,
+    compressor_type=CompressorType.POSITIVE_DISPLACEMENT,
     cycling_degradation_coefficient=0.25,
     standby_power=500.0,
     space_gain_fraction=0.02,
     oil_cooler_fraction=0.01,
     auxiliary_fraction=0.01,
     path_type=CompliancePathType.PRM,
-    compressor_type=CompressorType.POSITIVE_DISPLACEMENT,
-    condenser_type=CondenserType.LIQUID_COOLED,
 )
 
 representation = new_chiller2.generate_205_representation()
