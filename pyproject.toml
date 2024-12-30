@@ -4,10 +4,15 @@ version = "0.1.0"
 description = ""
 authors = ["Big Ladder Software"]
 
+[[tool.poetry.source]]
+name = "test-pypi"
+url = "https://test.pypi.org/simple/"
+priority = "explicit"
+
 [tool.poetry.dependencies]
 python = "^3.10"
 koozie = "^1.2.4"
-CoolProp = "^6.6.0"
+CoolProp = {version="6.6.1.post1", source = "test-pypi"} #"^6.6.0"
 scipy = "^1.11.4"
 PsychroLib = "^2.5.0"
 
