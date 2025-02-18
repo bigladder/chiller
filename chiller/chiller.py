@@ -20,8 +20,9 @@ from .conditions import (
 
 
 class FloatRange(NamedTuple):
-    min: float|None
-    max: float|None
+    min: float | None
+    max: float | None
+
 
 class CondenserType(Enum):
     LIQUID = 1
@@ -526,6 +527,100 @@ class AirCooledChiller(Chiller):
         return fr_u(900, "cfm/ton_ref") * self.net_evaporator_capacity(
             rated_conditions_at_speed
         )
+
+    def make_performance_map(self) -> dict:
+        # Create conditions
+        evaporator_liquid_volumetric_flow_rates = [
+            self.rated_operating_conditions.evaporator_outlet.V_dot
+        ]
+        evaporator_liquid_leaving_temperatures = linspace(
+            self.evaporator_leaving_temperature_range.min,
+            self.evaporator_leaving_temperature_range.max,
+            4,
+        ).tolist()
+        compressor_sequence_numbers = list(
+            range(1, self.number_of_compressor_speeds + 1)
+        )
+
+        condenser_air_entering_drybulb_temperatures = linspace(
+            self.condenser_entering_temperature_range.min,
+            self.condenser_entering_temperature_range.max,
+            4,
+        ).tolist()
+        condenser_air_entering_relative_humidities = [0.4]
+        ambient_pressures = [fr_u(1.0, "atm")]
+        grid_variables = {
+            "evaporator_liquid_volumetric_flow_rate": evaporator_liquid_volumetric_flow_rates,
+            "evaporator_liquid_leaving_temperature": evaporator_liquid_leaving_temperatures,
+            "condenser_air_entering_drybulb_temperature": condenser_air_entering_drybulb_temperatures,
+            "condenser_air_entering_relative_humidity": condenser_air_entering_relative_humidities,
+            "ambient_pressure": ambient_pressures,
+            "compressor_sequence_number": compressor_sequence_numbers,
+        }
+
+        input_powers = []
+        net_evaporator_capacities = []
+        net_condenser_capacities = []
+        oil_cooler_heats = []
+        auxiliary_heats = []
+        operation_states = []
+        condenser_air_volumetric_flow_rates = []
+
+        for v_evap in evaporator_liquid_volumetric_flow_rates:
+            for t_evap in evaporator_liquid_leaving_temperatures:
+                for t_cond in condenser_air_entering_drybulb_temperatures:
+                    for rh_cond in condenser_air_entering_relative_humidities:
+                        for p_cond in ambient_pressures:
+                            for speed in [
+                                self.number_of_compressor_speeds - n
+                                for n in compressor_sequence_numbers
+                            ]:
+                                conditions = OperatingConditions(
+                                    evaporator_outlet=LiquidState(
+                                        temperature=t_evap,
+                                        volumetric_flow_rate=v_evap,
+                                    ),
+                                    condenser_inlet=PsychrometricState(
+                                        drybulb=t_cond,
+                                        relative_humidity=rh_cond,
+                                        pressure=p_cond,
+                                    ),
+                                    compressor_speed=speed,
+                                )
+
+                                input_powers.append(self.input_power(conditions))
+                                net_evaporator_capacities.append(
+                                    self.net_evaporator_capacity(conditions)
+                                )
+                                net_condenser_capacities.append(
+                                    self.net_condenser_capacity(conditions)
+                                )
+                                condenser_air_volumetric_flow_rates.append(
+                                    self.condenser_air_volumetric_flow_rate(conditions)
+                                )
+                                oil_cooler_heats.append(
+                                    self.oil_cooler_heat(conditions)
+                                )
+                                auxiliary_heats.append(self.auxiliary_heat(conditions))
+                                operation_states.append("NORMAL")
+
+        lookup_variables = {
+            "input_power": input_powers,
+            "net_evaporator_capacity": net_evaporator_capacities,
+            "net_condenser_capacity": net_condenser_capacities,
+            "condenser_air_volumetric_flow_rate": condenser_air_volumetric_flow_rates,
+            "oil_cooler_heat": oil_cooler_heats,
+            "auxiliary_heat": auxiliary_heats,
+            "operation_state": operation_states,
+        }
+
+        return {
+            "grid_variables": grid_variables,
+            "lookup_variables": lookup_variables,
+        }
+
+
+class EvaporativelyCooledChiller(AirCooledChiller):
 
     def evaporation_rate(self, conditions: OperatingConditions | None = None) -> float:
         if conditions is None:
